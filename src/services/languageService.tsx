@@ -1,4 +1,4 @@
-import { LabelOptions, LanguageDef, ViewModel } from "../model/viewModel";
+import { LabelOptions, LanguageDef, SecInfo, ViewModel } from "../model/viewModel";
 import { dvService } from "./dataverseService";
 import ExcelJS from "exceljs";
 
@@ -29,7 +29,7 @@ export class languageService {
       this.vm.message = "Getting base language...";
       this.vm.exportpercentage = 0.05;
       this.baseLanguage = await this.dvSvc.getBaseLanguage();
-      console.log("Base language", this.baseLanguage);
+      this.onLog(`Base language is ${this.baseLanguage.name} (${this.baseLanguage.code})`, "info");
 
       if (this.vm.options.exportAllLanguages) this.outputLangs = this.vm.allLanguages as LanguageDef[];
       else this.outputLangs = [this.vm.selectedLanguage as LanguageDef];
@@ -71,6 +71,10 @@ export class languageService {
       this.vm.message = "Exporting forms...";
       this.vm.exportpercentage = 0.8;
       await this.exportForms(workbook);
+
+      this.vm.message = "Exporting site map...";
+      this.vm.exportpercentage = 0.9;
+      await this.exportSiteMap(workbook);
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
@@ -132,7 +136,7 @@ export class languageService {
 
     await Promise.all(
       this.vm.selectedTables.map(async (table) => {
-        console.log("fetching fields for", table.logicalName);
+        this.onLog(`Fetching attributes for ${table.logicalName}...`, "info");
         await this.dvSvc.getTableFields(table);
       }),
     );
@@ -370,7 +374,7 @@ export class languageService {
   }
 
   private async exportViews(workbook: ExcelJS.Workbook) {
-    console.log("Exporting views...");
+    this.onLog("Exporting views...", "info");
     const wsheet = workbook.addWorksheet("Views");
     wsheet.addRow([
       "View Id",
@@ -403,7 +407,7 @@ export class languageService {
   }
 
   private async exportCharts(workbook: ExcelJS.Workbook) {
-    console.log("Exporting charts...");
+    this.onLog("Exporting charts...", "info");
     const wsheet = workbook.addWorksheet("Charts");
     wsheet.addRow(["Chart Id", "Entity Logical Name", "Type", ...this.outputLangs.map((lang) => lang.code)]);
     await Promise.all(
@@ -445,7 +449,7 @@ export class languageService {
       this.vm.options.formTabs
     ) {
       await this.dvSvc.getUserLanguage().then((result: { uiLocale: string; locale: string; userid: string }) => {
-        console.log("User language", result.uiLocale, result.locale);
+        this.onLog(`User language is ${result.uiLocale} (${result.locale})`, "info");
         this.vm.uiLocale = result.uiLocale;
         this.vm.locale = result.locale;
         this.vm.userId = result.userid;
@@ -537,7 +541,7 @@ export class languageService {
             });
           }
         });
-        console.log("Exporting form tabs", table.tabs);
+        this.onLog("Exporting form tabs", "info");
         table.tabs.forEach((tab) => {
           const row = [
             `${tab.id}`,
@@ -577,7 +581,6 @@ export class languageService {
               const labels = element.querySelector("labels");
               const firstLabel = labels?.firstElementChild;
               const parentTab = element.closest("tab");
-              console.log(firstLabel, parentTab);
               const parentTabName = parentTab?.getAttribute("name") ?? "";
               const existingSection = table.sections.find((sec) => sec.id === element.getAttribute("id"));
               if (existingSection) {
@@ -653,7 +656,6 @@ export class languageService {
         table.forms.forEach((form) => {
           if (form.props) {
             const xmlDoc = new DOMParser().parseFromString(form.props.formXml, "application/xml");
-            console.log("Processing form", form.name, "with xml", form.props.formXml);
             const fields = xmlDoc.getElementsByTagName("cell");
             Array.from(fields).forEach((element) => {
               const labels = element.querySelector("labels");
@@ -664,7 +666,6 @@ export class languageService {
               const section =
                 parentSection?.querySelector("labels")?.firstElementChild?.getAttribute("description") ?? "";
               const control = element.querySelector("control");
-              console.log("control", control);
               const attributeName = control?.getAttribute("id") ?? "";
               const displayName = table.fields
                 .find((f) => f.name === attributeName)
@@ -730,6 +731,185 @@ export class languageService {
     }
 
     this.styleSheet(wsheet);
+  }
+
+  private async exportSiteMap(workbook: ExcelJS.Workbook) {
+    const areaSheet = workbook.addWorksheet("SiteMap Areas");
+    areaSheet.addRow(["SiteMap Name", "SiteMap Id", "Area Id", "Type", ...this.outputLangs.map((lang) => lang.code)]);
+    const groupSheet = workbook.addWorksheet("SiteMap Groups");
+    groupSheet.addRow([
+      "SiteMap Name",
+      "SiteMap Id",
+      "Area Id",
+      "Group Id",
+      "Type",
+      ...this.outputLangs.map((lang) => lang.code),
+    ]);
+    const subareaSheet = workbook.addWorksheet("SiteMap SubAreas");
+    subareaSheet.addRow([
+      "SiteMap Name",
+      "SiteMap Id",
+      "Area Id",
+      "Group Id",
+      "SubArea Id",
+      "Type",
+      ...this.outputLangs.map((lang) => lang.code),
+    ]);
+
+    this.vm.siteMaps = await this.dvSvc.getSiteMaps(this.vm.solution?.solutionId ?? "");
+
+    if (this.vm.siteMaps.length === 0) {
+      this.onLog("No site map found for the selected solution.", "warning");
+      return;
+    }
+
+    this.vm.siteMaps.forEach((sm) => {
+      console.log(sm.props?.sitemapXml);
+      const xmlDoc = new DOMParser().parseFromString(sm.props?.sitemapXml, "application/xml");
+      const areas = xmlDoc.getElementsByTagName("Area");
+      Array.from(areas).forEach((area) => {
+        const areaId = area.getAttribute("Id") ?? "";
+        const areaTitles = area.querySelector("Titles");
+        const areaDescriptions = area.querySelector("Descriptions");
+        this.vm.siteAreas.push({
+          id: areaId,
+          name: area.getAttribute("title") ?? "",
+          langProps: [
+            {
+              name: "Title",
+              translation: areaTitles?.children
+                ? Array.from(areaTitles.children).map((label) => ({
+                    code: label.getAttribute("LCID") ?? "",
+                    translation: label.getAttribute("Title") ?? "",
+                  }))
+                : [],
+            },
+            {
+              name: "Description",
+              translation: areaDescriptions?.children
+                ? Array.from(areaDescriptions.children).map((label) => ({
+                    code: label.getAttribute("LCID") ?? "",
+                    translation: label.getAttribute("Description") ?? "",
+                  }))
+                : [],
+            },
+          ],
+          props: { uniqueName: sm.props?.uniqueName ?? "", siteName: sm.name ?? "", siteId: sm.id ?? "" },
+        });
+
+        const groups = area.getElementsByTagName("Group");
+        Array.from(groups).forEach((group) => {
+          const groupId = group.getAttribute("Id") ?? "";
+          let groupTitles = group.querySelector("Titles");
+          if (groupTitles?.parentElement != group) groupTitles = null;
+          const groupDescriptions = group.querySelector("Descriptions");
+          this.vm.siteGroups.push({
+            id: groupId,
+            name: group.getAttribute("title") ?? "",
+            langProps: [
+              {
+                name: "Title",
+                translation: groupTitles?.children
+                  ? Array.from(groupTitles.children).map((label) => ({
+                      code: label.getAttribute("LCID") ?? "",
+                      translation: label.getAttribute("Title") ?? "",
+                    }))
+                  : [],
+              },
+              {
+                name: "Description",
+                translation: groupDescriptions?.children
+                  ? Array.from(groupDescriptions.children).map((label) => ({
+                      code: label.getAttribute("LCID") ?? "",
+                      translation: label.getAttribute("Description") ?? "",
+                    }))
+                  : [],
+              },
+            ],
+            props: { uniqueName: sm.props?.uniqueName ?? "", siteName: sm.name ?? "", siteId: sm.id ?? "" },
+          });
+
+          const subareas = group.getElementsByTagName("SubArea");
+          Array.from(subareas).forEach((subarea) => {
+            const subareaId = subarea.getAttribute("Id") ?? "";
+            const subareaTitles = subarea.querySelector("Titles");
+            const subareaDescriptions = subarea.querySelector("Descriptions");
+            this.vm.siteSubAreas.push({
+              id: subareaId,
+              name: subarea.getAttribute("title") ?? "",
+              langProps: [
+                {
+                  name: "Title",
+                  translation: subareaTitles?.children
+                    ? Array.from(subareaTitles.children).map((label) => ({
+                        code: label.getAttribute("LCID") ?? "",
+                        translation: label.getAttribute("Title") ?? "",
+                      }))
+                    : [],
+                },
+                {
+                  name: "Description",
+                  translation: subareaDescriptions?.children
+                    ? Array.from(subareaDescriptions.children).map((label) => ({
+                        code: label.getAttribute("LCID") ?? "",
+                        translation: label.getAttribute("Description") ?? "",
+                      }))
+                    : [],
+                },
+              ],
+              props: { uniqueName: sm.props?.uniqueName ?? "", siteName: sm.name ?? "", siteId: sm.id ?? "", groupId: groupId },
+            });
+          });
+        });
+      });
+    });
+    console.log("areas", this.vm.siteAreas);
+
+    for (const area of this.vm.siteAreas) {
+      for (const langprop of area.langProps) {
+        areaSheet.addRow([
+          area.props?.siteName ?? "",
+          area.props?.siteId ?? "",
+          area.id,
+          langprop.name,
+          ...langprop.translation.flatMap((trans) => trans.translation),
+        ]);
+      }
+    }
+
+    for (const group of this.vm.siteGroups) {
+      for (const langprop of group.langProps) {
+        groupSheet.addRow([
+          group.props?.siteName ?? "",
+          group.props?.siteId ?? "",
+          group.props?.uniqueName ?? "",
+          group.id,
+          langprop.name,
+          ...langprop.translation.flatMap((trans) => trans.translation),
+        ]);
+      }
+    }
+
+    for (const subarea of this.vm.siteSubAreas) {
+      for (const langprop of subarea.langProps) {
+        subareaSheet.addRow([
+          subarea.props?.siteName ?? "",
+          subarea.props?.siteId ?? "",
+          subarea.props?.uniqueName ?? "",
+          subarea.props?.groupId ?? "",
+          subarea.id,
+          langprop.name,
+          ...langprop.translation.flatMap((trans) => trans.translation),
+        ]);
+      }
+    }
+
+    console.log("groups", this.vm.siteGroups);
+    console.log("subareas", this.vm.siteSubAreas);
+    console.log("sitemaps", this.vm.siteMaps);
+    this.styleSheet(areaSheet);
+    this.styleSheet(groupSheet);
+    this.styleSheet(subareaSheet);
   }
 
   private styleSheet(sheet: ExcelJS.Worksheet): void {

@@ -1,4 +1,5 @@
 import { makeAutoObservable } from "mobx";
+import { Solution } from "./solution";
 
 export class ViewModel {
   exporting: boolean = false;
@@ -11,6 +12,11 @@ export class ViewModel {
   uiLocale: string = "";
   locale: string = "";
   userId: string = "";
+  solution?: Solution;
+  siteMaps: SecInfo[] = [];
+  siteAreas: SecInfo[] = [];
+  siteGroups: SecInfo[] = [];
+  siteSubAreas: SecInfo[] = [];
 
   constructor() {
     makeAutoObservable(this);

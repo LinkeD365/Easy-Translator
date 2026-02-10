@@ -36,6 +36,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
   const [selectedSolution, setSelectedSolution] = React.useState<Solution | null>(null);
   const [selectedTables, setSelectedTables] = React.useState<SelectionItemId[]>([]);
   const [tables, setTables] = React.useState<Table[]>([]);
+  const [loading, setLoading] = React.useState<boolean>(false);
   const [labelOption, setLabelOption] = React.useState<string>(String(vm.options.labelOptions));
   const [languages, setLanguages] = React.useState<LanguageDef[]>([]);
 
@@ -61,9 +62,11 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
   React.useEffect(() => {
     if (!selectedSolution) {
       setTables([]);
+      setLoading(false);
       return;
     }
     const fetchTables = async () => {
+      setLoading(true);
       onLog(`Loading tables for ${selectedSolution.name}`);
       try {
         const solutionTables = await dvSvc.getSolutionTables(selectedSolution.solutionId);
@@ -71,6 +74,8 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
         onLog("Tables loaded", "success");
       } catch (err) {
         onLog("Failed to load tables", "error");
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -80,6 +85,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
   async function exportExcel() {
     vm.selectedTables = tables.filter((table) => selectedTables.includes(table.id));
     //await window.toolboxAPI.utils.showLoading("Exporting translations...");
+    vm.solution = selectedSolution || undefined;
     await lgSvc.exportTranslations();
     //window.toolboxAPI.utils.hideLoading();
   }
@@ -88,12 +94,74 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
     vm.selectedLanguage = vm.allLanguages?.find((lang) => lang.code === code);
   }
 
+  function toggleAllGlobalOptions(checked: boolean): void {
+    vm.options.optionSets = checked;
+    vm.options.globalOptionSets = checked;
+    vm.options.siteMaps = checked;
+    vm.options.dashboards = checked;
+  }
+
+  function allGlobalOptionsChecked(): boolean {
+    return !!vm.options.optionSets && !!vm.options.globalOptionSets && !!vm.options.siteMaps && !!vm.options.dashboards;
+  }
+
+  function someGlobalOptionsChecked(): boolean {
+    return !!vm.options.optionSets || !!vm.options.globalOptionSets || !!vm.options.siteMaps || !!vm.options.dashboards;
+  }
+
+  function toggleAllTableOptions(checked: boolean): void {
+    vm.options.table = checked;
+    vm.options.fields = checked;
+    vm.options.localOptionSets = checked;
+    vm.options.booleanOptions = checked;
+    vm.options.views = checked;
+    vm.options.charts = checked;
+    vm.options.forms = checked;
+    vm.options.formTabs = checked;
+    vm.options.formSections = checked;
+    vm.options.formFields = checked;
+    vm.options.relationships = checked;
+  }
+
+  function allTableOptionsChecked(): boolean {
+    return (
+      !!vm.options.table &&
+      !!vm.options.fields &&
+      !!vm.options.localOptionSets &&
+      !!vm.options.booleanOptions &&
+      !!vm.options.views &&
+      !!vm.options.charts &&
+      !!vm.options.forms &&
+      !!vm.options.formTabs &&
+      !!vm.options.formSections &&
+      !!vm.options.formFields &&
+      !!vm.options.relationships
+    );
+  }
+
+  function someTableOptionsChecked(): boolean {
+    return (
+      !!vm.options.table ||
+      !!vm.options.fields ||
+      !!vm.options.localOptionSets ||
+      !!vm.options.booleanOptions ||
+      !!vm.options.views ||
+      !!vm.options.charts ||
+      !!vm.options.forms ||
+      !!vm.options.formTabs ||
+      !!vm.options.formSections ||
+      !!vm.options.formFields ||
+      !!vm.options.relationships
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: "16px" }}>
       <Toolbar style={{ justifyContent: "space-between" }}>
         <ToolbarGroup>
           <Combobox
             placeholder="Select a Solution"
+            disabled={vm.exporting}
             value={selectedSolution?.name}
             onOptionSelect={(_, data) =>
               setSelectedSolution(solutions.find((sol) => sol.uniqueName === data.optionValue) || null)
@@ -107,34 +175,72 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
           </Combobox>
         </ToolbarGroup>
         <ToolbarGroup>
-          <Button icon={<ArrowExportUpFilled />} disabled={selectedTables.length === 0} onClick={exportExcel}>
+          <Button
+            icon={<ArrowExportUpFilled />}
+            appearance="subtle"
+            disabled={selectedTables.length === 0 || vm.exporting}
+            onClick={exportExcel}
+          >
             Export
           </Button>
         </ToolbarGroup>
       </Toolbar>
       {vm.exporting && (
-        <Field style={{margin: "20px"}} validationMessage={vm.message} validationState="none">
+        <Field style={{ margin: "20px" }} validationMessage={vm.message} validationState="none">
           <ProgressBar thickness="large" value={vm.exportpercentage}></ProgressBar>
         </Field>
       )}
       {!vm.exporting && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "16px", flex: 1, minHeight: 0 }}>
-          <div style={{ overflow: "auto" }}>
-            <List
-              selectionMode="multiselect"
-              selectedItems={selectedTables}
-              onSelectionChange={(_, data) => setSelectedTables(data.selectedItems)}
-              aria-label="List of Tables"
-            >
-              {tables.map((table) => (
-                <ListItem key={table.id} value={table.id}>
-                  {table.label}
-                </ListItem>
-              ))}
-            </List>
+          <div style={{ overflow: "auto", border: "1px solid #e0e0e0", borderRadius: "4px" }}>
+            {!selectedSolution ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                  padding: "20px",
+                  textAlign: "center",
+                }}
+              >
+                <p style={{ color: "#666", fontSize: "16px" }}>Please select a solution to view available tables</p>
+              </div>
+            ) : loading ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                  padding: "20px",
+                  textAlign: "center",
+                }}
+              >
+                <p style={{ color: "#666", fontSize: "16px" }}>Loading tables...</p>
+              </div>
+            ) : (
+              <List
+                selectionMode="multiselect"
+                selectedItems={selectedTables}
+                onSelectionChange={(_, data) => setSelectedTables(data.selectedItems)}
+                aria-label="List of Tables"
+              >
+                {tables.map((table) => (
+                  <ListItem key={table.id} value={table.id}>
+                    {table.label}
+                  </ListItem>
+                ))}
+              </List>
+            )}
           </div>
           <div style={{ overflow: "auto", height: "100%" }}>
             <Divider>Global Options</Divider>
+            <Checkbox
+              checked={allGlobalOptionsChecked() ? true : someGlobalOptionsChecked() ? "mixed" : false}
+              label="Select All"
+              onChange={(_, data) => toggleAllGlobalOptions(data.checked === true)}
+            />
             <Checkbox
               checked={!!vm.options.optionSets}
               label="Export Option Sets"
@@ -156,6 +262,11 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
               onChange={(_, data) => (vm.options.dashboards = data.checked === true)}
             />
             <Divider>Table Related Options</Divider>
+            <Checkbox
+              checked={allTableOptionsChecked() ? true : someTableOptionsChecked() ? "mixed" : false}
+              label="Select All"
+              onChange={(_, data) => toggleAllTableOptions(data.checked === true)}
+            />
             <Checkbox
               checked={!!vm.options.table}
               label="Export Tables"

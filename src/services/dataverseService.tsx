@@ -1,5 +1,5 @@
 import { Solution } from "../model/solution";
-import { LangTranslation, LanguageDef, Table, OptionSetDef } from "../model/viewModel";
+import { LangTranslation, LanguageDef, Table, OptionSetDef, SecInfo } from "../model/viewModel";
 import * as locale from "locale-codes";
 
 interface dvServiceProps {
@@ -578,7 +578,7 @@ export class dvService {
     });
   }
 
-  async getForms(table: Table, lang: LanguageDef, base: boolean ): Promise<boolean> {
+  async getForms(table: Table, lang: LanguageDef, base: boolean): Promise<boolean> {
     return new Promise<boolean>(async (resolve, reject) => {
       try {
         var fetchXml = [
@@ -599,7 +599,7 @@ export class dvService {
         ].join("");
 
         const formsData = await this.dvApi.fetchXmlQuery(fetchXml);
-        
+
         await Promise.all(
           (formsData.value as any[]).map(async (form: any) => {
             return new Promise<void>(async (resolve) => {
@@ -656,7 +656,7 @@ export class dvService {
           localeid: lang,
         });
 
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise((r) => setTimeout(r, 2000));
         resolve();
       } catch (error) {
         this.onLog("Failed to update language: " + (error as Error).message, "error");
@@ -683,5 +683,82 @@ export class dvService {
       this.onLog("Failed to get user language: " + (error as Error).message, "error");
       throw error;
     }
+  }
+
+  async getSiteMaps(solutionId: string): Promise<SecInfo[]> {
+    return new Promise<SecInfo[]>(async (resolve, reject) => {
+      try {
+        let siteMaps: SecInfo[] = [];
+        if (solutionId !== "") {
+          const fetchXml = [
+            "<fetch>",
+            "  <entity name='solutioncomponent'>",
+            "    <attribute name='objectid'/>",
+            "    <filter>",
+            "      <condition attribute='solutionid' operator='eq' value='",
+            solutionId,
+            "' uiname='PPSchool' uitype='solution'/>",
+            "      <filter>",
+            "        <condition attribute='componenttype' operator='eq' value='62'/>",
+            "      </filter>",
+            "    </filter>",
+            "  </entity>",
+            "</fetch>",
+          ].join("");
+
+          const data = await this.dvApi.fetchXmlQuery(fetchXml);
+          if (!data.value || (data.value as any[]).length === 0) {
+            this.onLog("No site maps found for the selected solution.", "warning");
+            resolve([]);
+            return;
+          }
+          const siteMapXml = [
+            "<fetch>",
+            "  <entity name='sitemap'>",
+            "    <attribute name='sitemapxml'/>",
+            "    <attribute name='sitemapnameunique'/>",
+            "    <attribute name='sitemapname'/>",
+            "    <filter>",
+            "      <condition attribute='sitemapid' operator='in'>",
+            data.value.map((sm) => `<value>${sm.objectid}</value>`).join(""),
+            "      </condition>",
+            "    </filter>",
+            "  </entity>",
+            "</fetch>",
+          ].join("");
+          const siteMapData = await this.dvApi.fetchXmlQuery(siteMapXml);
+          siteMaps = (siteMapData.value as any[]).map((sm: any) => {
+            return {
+              id: sm.sitemapid,
+              name: sm.sitemapname,
+              langProps: [],
+              props: { sitemapXml: sm.sitemapxml, uniqueName: sm.sitemapnameunique },
+            } as SecInfo;
+          });
+          
+        } else {
+          const url =
+            "sitemaps/Microsoft.Dynamics.CRM.RetrieveUnpublishedMultiple()?$select=sitemapxml,sitemapnameunique,sitemapname";
+          const data = await this.dvApi.queryData(url);
+          siteMaps = (data.value as any[]).map((sm: any) => {
+            return {
+              id: sm.SitemapId,
+              name: sm.SitemapName,
+              langProps: [],
+              props: { sitemapXml: sm.SitemapXml, uniqueName: sm.SitemapNameUnique },
+            } as SecInfo;
+          });
+        }
+        if (siteMaps.length === 0) {
+          this.onLog("No site maps found for the selected solution.", "warning");
+          resolve([]);
+          return;
+        }
+        this.onLog(`Fetched ${siteMaps.length} site maps for solution: ${solutionId}`, "success");
+        resolve(siteMaps);
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 }
