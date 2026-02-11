@@ -697,7 +697,7 @@ export class dvService {
             "    <filter>",
             "      <condition attribute='solutionid' operator='eq' value='",
             solutionId,
-            "' uiname='PPSchool' uitype='solution'/>",
+            "' uitype='solution'/>",
             "      <filter>",
             "        <condition attribute='componenttype' operator='eq' value='62'/>",
             "      </filter>",
@@ -735,7 +735,6 @@ export class dvService {
               props: { sitemapXml: sm.sitemapxml, uniqueName: sm.sitemapnameunique },
             } as SecInfo;
           });
-          
         } else {
           const url =
             "sitemaps/Microsoft.Dynamics.CRM.RetrieveUnpublishedMultiple()?$select=sitemapxml,sitemapnameunique,sitemapname";
@@ -756,6 +755,90 @@ export class dvService {
         }
         this.onLog(`Fetched ${siteMaps.length} site maps for solution: ${solutionId}`, "success");
         resolve(siteMaps);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  async getDashboards(solutionId: string): Promise<SecInfo[]> {
+    return new Promise<SecInfo[]>(async (resolve, reject) => {
+      let dashboards: SecInfo[] = [];
+      try {
+        if (solutionId !== "") {
+          const fetchXml = [
+            "<fetch>",
+            "  <entity name='solutioncomponent'>",
+            "    <attribute name='objectid'/>",
+            "    <filter>",
+            "      <condition attribute='solutionid' operator='eq' value='",
+            solutionId,
+            "' uitype='solution'/>",
+            "      <filter>",
+            "        <condition attribute='componenttype' operator='eq' value='60'/>",
+            "      </filter>",
+            "    </filter>",
+            "  </entity>",
+            "</fetch>",
+          ].join("");
+
+          const data = await this.dvApi.fetchXmlQuery(fetchXml);
+          if (!data.value || (data.value as any[]).length === 0) {
+            this.onLog("No dashboards found for the selected solution.", "warning");
+            resolve([]);
+            return;
+          }
+          console.log("Dashboard fetchXml result:", data);
+          const dashboardsXml = [
+            "<fetch>",
+            "  <entity name='systemform'>",
+            "    <attribute name='formxml'/>",
+            "    <attribute name='name'/>",
+            "    <attribute name='formidunique'/>",
+            "    <attribute name='formid'/>",
+            "    <filter>",
+            "      <condition attribute='formid' operator='in'>",
+            data.value.map((db) => `<value>${db.objectid}</value>`).join(""),
+            "      </condition>",
+            "      <condition attribute='type' operator='eq' value='0'/>",
+            "    </filter>",
+            "  </entity>",
+            "</fetch>",
+          ].join("");
+          const dashboardData = await this.dvApi.fetchXmlQuery(dashboardsXml);
+          dashboards = (dashboardData.value as any[]).map((db: any) => {
+            return {
+              id: db.formid,
+              name: db.name,
+              langProps: [],
+              props: { formXml: db.formxml, uniqueName: db.formidunique, formId: db.formid },
+            } as SecInfo;
+          });
+        } else {
+          const dashboardsXml = [
+            "<fetch>",
+            "  <entity name='systemform'>",
+            "    <attribute name='formid'/>",
+            "    <attribute name='formidunique'/>",
+            "    <attribute name='formxml'/>",
+            "    <attribute name='name'/>",
+            "    <filter>",
+            "      <condition attribute='type' operator='eq' value='0'/>",
+            "    </filter>",
+            "  </entity>",
+            "</fetch>",
+          ].join("");
+          const dashboardData = await this.dvApi.fetchXmlQuery(dashboardsXml);
+          dashboards = (dashboardData.value as any[]).map((db: any) => {
+            return {
+              id: db.formid,
+              name: db.name,
+              langProps: [],
+              props: { formXml: db.formxml, uniqueName: db.formidunique, formId: db.formid },
+            } as SecInfo;
+          });
+        }
+        resolve(dashboards);
       } catch (error) {
         reject(error);
       }

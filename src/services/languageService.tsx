@@ -44,37 +44,44 @@ export class languageService {
       await this.exportTableInfo(workbook);
 
       this.vm.message = "Exporting attributes...";
-      this.vm.exportpercentage = 0.2;
+      this.vm.exportpercentage = 0.15;
       await this.exportAttributes(workbook);
 
       this.vm.message = "Exporting relationships...";
-      this.vm.exportpercentage = 0.3;
+      this.vm.exportpercentage = 0.2;
       await this.exportRelationships(workbook);
 
       this.vm.message = "Exporting option sets...";
-      this.vm.exportpercentage = 0.4;
+      this.vm.exportpercentage = 0.3;
       if (this.vm.options.localOptionSets || this.vm.options.globalOptionSets) {
         await this.exportOptionSets(workbook);
       }
       this.vm.message = "Exporting boolean options...";
-      this.vm.exportpercentage = 0.5;
+      this.vm.exportpercentage = 0.4;
       await this.exportBooleans(workbook);
 
       this.vm.message = "Exporting views...";
-      this.vm.exportpercentage = 0.6;
+      this.vm.exportpercentage = 0.5;
       await this.exportViews(workbook);
 
       this.vm.message = "Exporting charts...";
-      this.vm.exportpercentage = 0.7;
+      this.vm.exportpercentage = 0.6;
       await this.exportCharts(workbook);
 
       this.vm.message = "Exporting forms...";
-      this.vm.exportpercentage = 0.8;
+      this.vm.exportpercentage = 0.7;
       await this.exportForms(workbook);
 
       this.vm.message = "Exporting site map...";
-      this.vm.exportpercentage = 0.9;
+      this.vm.exportpercentage = 0.8;
       await this.exportSiteMap(workbook);
+
+      this.vm.message = "Exporting dashboards...";
+      this.vm.exportpercentage = 0.9;
+      await this.exportDashboards(workbook);
+
+      this.vm.message = "Finalizing export...";
+      this.vm.exportpercentage = 0.95;
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
@@ -441,13 +448,9 @@ export class languageService {
       "Type",
       ...this.outputLangs.map((lang) => lang.code),
     ]);
-
-    if (
-      this.vm.options.forms ||
-      this.vm.options.formFields ||
-      this.vm.options.formSections ||
-      this.vm.options.formTabs
-    ) {
+    const formsExport =
+      this.vm.options.forms || this.vm.options.formFields || this.vm.options.formSections || this.vm.options.formTabs;
+    if (formsExport || this.vm.options.dashboards) {
       await this.dvSvc.getUserLanguage().then((result: { uiLocale: string; locale: string; userid: string }) => {
         this.onLog(`User language is ${result.uiLocale} (${result.locale})`, "info");
         this.vm.uiLocale = result.uiLocale;
@@ -461,12 +464,26 @@ export class languageService {
           await this.dvSvc.updateLanguage(lang.code, this.vm.userId);
           currentLang = lang.code;
         }
-        this.vm.message = `Fetching forms for language ${lang.name}...`;
-        await Promise.all(
-          this.vm.selectedTables.map(async (table) => {
-            await this.dvSvc.getForms(table, lang, lang.code === this.baseLanguage?.code ? true : false);
-          }),
-        );
+
+        if (formsExport) {
+          this.vm.message = `Fetching forms for language ${lang.name}...`;
+          await Promise.all(
+            this.vm.selectedTables.map(async (table) => {
+              await this.dvSvc.getForms(table, lang, lang.code === this.baseLanguage?.code ? true : false);
+            }),
+          );
+        }
+        if (this.vm.options.dashboards) {
+          this.vm.message = `Fetching dashboards for language ${lang.name}...`;
+          const dashboards = await this.dvSvc.getDashboards(this.vm.solution?.solutionId ?? "");
+          if (lang.code === this.baseLanguage?.code) {
+            dashboards.forEach((d) => {
+              if (d.props) d.props.base = true;
+              else d.props = { base: true };
+            });
+          }
+          this.vm.dashboards.push(...dashboards);
+        }
       }
     }
     this.vm.message = "Reverting language...";
@@ -764,7 +781,6 @@ export class languageService {
     }
 
     this.vm.siteMaps.forEach((sm) => {
-      console.log(sm.props?.sitemapXml);
       const xmlDoc = new DOMParser().parseFromString(sm.props?.sitemapXml, "application/xml");
       const areas = xmlDoc.getElementsByTagName("Area");
       Array.from(areas).forEach((area) => {
@@ -857,7 +873,12 @@ export class languageService {
                     : [],
                 },
               ],
-              props: { uniqueName: sm.props?.uniqueName ?? "", siteName: sm.name ?? "", siteId: sm.id ?? "", groupId: groupId },
+              props: {
+                uniqueName: sm.props?.uniqueName ?? "",
+                siteName: sm.name ?? "",
+                siteId: sm.id ?? "",
+                groupId: groupId,
+              },
             });
           });
         });
@@ -891,6 +912,7 @@ export class languageService {
     }
 
     for (const subarea of this.vm.siteSubAreas) {
+      console.log("processing subarea", subarea);
       for (const langprop of subarea.langProps) {
         subareaSheet.addRow([
           subarea.props?.siteName ?? "",
@@ -910,6 +932,221 @@ export class languageService {
     this.styleSheet(areaSheet);
     this.styleSheet(groupSheet);
     this.styleSheet(subareaSheet);
+  }
+
+  private async exportDashboards(workbook: ExcelJS.Workbook) {
+    let wsheet = workbook.addWorksheet("Dashboards");
+    wsheet.addRow(["Form Unique Id", "Form Id", "Type", ...this.outputLangs.map((lang) => lang.code)]);
+
+    if (!this.vm.options.dashboards) {
+      this.styleSheet(wsheet);
+      return;
+    }
+    this.onLog("Fetching dashboards...", "info");
+
+    if (this.vm.dashboards.length === 0) {
+      this.onLog("No dashboards found for the selected solution.", "info");
+      return;
+    }
+
+    for (const dashboard of this.vm.dashboards.filter((d) => d.props?.base)) {
+      if (this.vm.options.labels()) {
+        const names = await this.dvSvc.getLocLabels("systemforms", dashboard.id, "name");
+        dashboard.langProps.push({ name: "name", translation: names });
+      }
+      if (this.vm.options.descriptions()) {
+        const descriptions = await this.dvSvc.getLocLabels("systemforms", dashboard.id, "description");
+        dashboard.langProps.push({ name: "description", translation: descriptions });
+      }
+      dashboard.langProps.forEach((langProp) => {
+        const row = [
+          `{${dashboard.props?.uniqueName ?? ""}}`,
+          `{${dashboard.id}}`,
+          langProp.name,
+          ...langProp.translation.map((trans) => trans.translation),
+        ];
+        wsheet.addRow(row);
+      });
+    }
+
+    for (const dashboard of this.vm.dashboards) {
+      const xmlDoc = new DOMParser().parseFromString(dashboard.props?.formXml ?? "", "application/xml");
+      const tabs = xmlDoc.getElementsByTagName("tab");
+      Array.from(tabs).forEach((tab) => {
+        const labels = tab.querySelector("labels");
+        const tabLabel = labels?.firstElementChild;
+        const tabName = tabLabel?.getAttribute("description") ?? "";
+        const existingTab = this.vm.dashboardTabs.find((t) => t.id === tab.getAttribute("id"));
+        if (existingTab) {
+          const labelProp = existingTab.langProps.find((lp) => lp.name === "Label");
+          if (labelProp) {
+            labelProp.translation.push({
+              code: dashboard.props?.lang ?? "",
+              translation: tabLabel?.getAttribute("description") ?? "",
+            });
+          }
+        } else {
+          this.vm.dashboardTabs.push({
+            id: tab.getAttribute("id") ?? "",
+            name: tabName,
+            props: { formUniqueName: dashboard.props?.uniqueName ?? "", formId: dashboard.props?.formId ?? "" },
+            langProps: [
+              {
+                name: "Label",
+                translation: [
+                  { code: dashboard.props?.lang ?? "", translation: tabLabel?.getAttribute("description") ?? "" },
+                ],
+              },
+            ],
+          });
+        }
+        const sections = tab.getElementsByTagName("section");
+        Array.from(sections).forEach((section) => {
+          const labels = section.querySelector("labels");
+          const sectionLabel = labels?.firstElementChild;
+          const sectionName = sectionLabel?.getAttribute("description") ?? "";
+          const existingSection = this.vm.dashboardSections.find((s) => s.id === section.getAttribute("id"));
+          if (existingSection) {
+            const labelProp = existingSection.langProps.find((lp) => lp.name === "Label");
+            if (labelProp) {
+              labelProp.translation.push({
+                code: dashboard.props?.lang ?? "",
+                translation: sectionLabel?.getAttribute("description") ?? "",
+              });
+            }
+          } else {
+            this.vm.dashboardSections.push({
+              id: section.getAttribute("id") ?? "",
+              name: dashboard.name,
+              props: { formUniqueName: dashboard.props?.uniqueName ?? "", formId: dashboard.props?.formId ?? "", tabName: tabName, sectionName: sectionName },
+              langProps: [
+                {
+                  name: "Label",
+                  translation: [
+                    { code: dashboard.props?.lang ?? "", translation: sectionLabel?.getAttribute("description") ?? "" },
+                  ],
+                },
+              ],
+            });
+          }
+          const cells = section.getElementsByTagName("cell");
+          Array.from(cells).forEach((cell) => {
+            const labels = cell.querySelector("labels");
+            const cellLabel = labels?.firstElementChild;
+            
+            const control = cell.querySelector("control");
+            if (!control) return;
+            const attributeName = control?.getAttribute("id") ?? "";
+            const displayName = this.vm.selectedTables
+              .flatMap((t) => t.fields)
+              .find((f) => f.name === attributeName)
+              ?.langProps.find((lp) => lp.name === "DisplayName")?.translation[0].translation;
+            const existingField = this.vm.dashboardFields.find((f) => f.id === cell.getAttribute("id"));
+            if (existingField) {
+              const labelProp = existingField.langProps.find((lp) => lp.name === "Label");
+              if (labelProp) {
+                labelProp.translation.push({
+                  code: dashboard.props?.lang ?? "",
+                  translation: cellLabel?.getAttribute("description") ?? "",
+                });
+              }
+            } else {
+              this.vm.dashboardFields.push({
+                id: cell.getAttribute("id") ?? "",
+                name: dashboard.name,
+                props: {
+                  formUniqueName: dashboard.props?.uniqueName ?? "",
+                  formId: dashboard.props?.formId ?? "",
+                  tabName: tabName,
+                  sectionName: sectionName,
+                  attributeName: attributeName,
+                  displayName: displayName ?? "",
+                  lang: dashboard.props?.lang ?? "",
+                },
+                langProps: [
+                  {
+                    name: "Label",
+                    translation: [
+                      { code: dashboard.props?.lang ?? "", translation: cellLabel?.getAttribute("description") ?? "" },
+                    ],
+                  },
+                ],
+              });
+            }
+          });
+        });
+      });
+    }
+
+    wsheet = workbook.addWorksheet("Dashboards Tabs");
+    wsheet.addRow([
+      "Tab Id",
+      "Form Name test",
+      "Form Unique Id",
+      "Form Id",
+      ...this.outputLangs.map((lang) => lang.code),
+    ]);
+    console.log("dashboard tabs", this.vm.dashboardTabs);
+    for (const tab of this.vm.dashboardTabs) {
+      const row = [
+        `${tab.id}`,
+        tab.name,
+        `{${tab.props?.formUniqueName ?? ""}}`,
+        `{${tab.props?.formId ?? ""}}`,
+        ...tab.langProps.flatMap((lp) => lp.translation.map((trans) => trans.translation)),
+      ];
+      wsheet.addRow(row);
+    }
+
+    wsheet = workbook.addWorksheet("Dashboards Sections");
+    console.log("dashboard sections", this.vm.dashboardSections);
+    wsheet.addRow([
+      "Section Id",
+      "Form Name",
+      "Form Unique Id",
+      "Form Id",
+      "Tab Name",
+      ...this.outputLangs.map((lang) => lang.code),
+    ]);
+    for (const section of this.vm.dashboardSections) {
+      const row = [
+        `${section.id}`,
+        section.name,
+        `{${section.props?.formUniqueName ?? ""}}`,
+        `{${section.props?.formId ?? ""}}`,
+        section.props?.tabName ?? "",
+        ...section.langProps
+          .filter((lp) => lp.name === "Label")
+          .flatMap((lp) => lp.translation.map((trans) => trans.translation)),
+      ];
+      wsheet.addRow(row);
+    }
+    console.log("dashboard fields", this.vm.dashboardFields);
+    wsheet = workbook.addWorksheet("Dashboards Fields");
+    wsheet.addRow([
+      "Label Id",
+      "Form Name",
+      "Form Unique Id",
+      "Form Id",
+      "Tab Name",
+      "Section Name",
+      ...this.outputLangs.map((lang) => lang.code),
+    ]);
+    for (const field of this.vm.dashboardFields) {
+      const row = [
+        `${field.id}`,
+        field.name,
+        field.props?.formUniqueName ?? "",
+        field.props?.formId ?? "",
+        field.props?.tabName ?? "",
+        field.props?.sectionName ?? "",
+        ...field.langProps
+          .filter((lp) => lp.name === "Label")
+          .flatMap((lp) => lp.translation.map((trans) => trans.translation)),
+      ];
+      wsheet.addRow(row);
+    }
+    this.styleSheet(wsheet);
   }
 
   private styleSheet(sheet: ExcelJS.Worksheet): void {

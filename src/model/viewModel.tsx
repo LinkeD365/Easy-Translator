@@ -17,6 +17,10 @@ export class ViewModel {
   siteAreas: SecInfo[] = [];
   siteGroups: SecInfo[] = [];
   siteSubAreas: SecInfo[] = [];
+  dashboards: SecInfo[] = [];
+  dashboardTabs: SecInfo[] = [];
+  dashboardSections: SecInfo[] = [];
+  dashboardFields: SecInfo[] = [];
 
   constructor() {
     makeAutoObservable(this);
@@ -68,10 +72,17 @@ export class Options {
   formFields: boolean = true;
   relationships: boolean = true;
   labelOptions: LabelOptions = LabelOptions.both;
+
   exportAllLanguages: boolean = true;
 
   constructor() {
     makeAutoObservable(this);
+  }
+  labels() {
+    return this.labelOptions !== LabelOptions.descriptions;
+  }
+  descriptions() {
+    return this.labelOptions !== LabelOptions.names;
   }
 }
 

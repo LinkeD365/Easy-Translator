@@ -5,6 +5,7 @@ import { Table, ViewModel, LabelOptions, LanguageDef } from "../model/viewModel"
 import { dvService } from "../services/dataverseService";
 import {
   Button,
+  Caption1,
   Checkbox,
   Combobox,
   Divider,
@@ -19,6 +20,7 @@ import {
   SelectionItemId,
   Toolbar,
   ToolbarGroup,
+  tokens,
 } from "@fluentui/react-components";
 import { Solution } from "../model/solution";
 import { ArrowExportUpFilled } from "@fluentui/react-icons";
@@ -192,7 +194,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
       )}
       {!vm.exporting && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "16px", flex: 1, minHeight: 0 }}>
-          <div style={{ overflow: "auto", border: "1px solid #e0e0e0", borderRadius: "4px" }}>
+          <div style={{ overflow: "auto", border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: "4px" }}>
             {!selectedSolution ? (
               <div
                 style={{
@@ -204,7 +206,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
                   textAlign: "center",
                 }}
               >
-                <p style={{ color: "#666", fontSize: "16px" }}>Please select a solution to view available tables</p>
+                <Caption1 style={{ textAlign: "center" }}>Please select a solution to view available tables</Caption1>
               </div>
             ) : loading ? (
               <div
@@ -217,7 +219,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
                   textAlign: "center",
                 }}
               >
-                <p style={{ color: "#666", fontSize: "16px" }}>Loading tables...</p>
+                <Caption1 style={{ textAlign: "center" }}>Loading tables...</Caption1>
               </div>
             ) : (
               <List
