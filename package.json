@@ -25,6 +25,10 @@
     "readmeUrl": "https://raw.githubusercontent.com/LinkeD365/Easy-Translator/refs/heads/master/README.md",
     "iconUrl": "https://raw.githubusercontent.com/LinkeD365/Easy-Translator/refs/heads/master/assets/icon.png"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LinkeD365/Easy-Translator"
+  },
   "scripts": {
     "build": "tsc && vite build",
     "dev": "vite",
