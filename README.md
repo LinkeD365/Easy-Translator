@@ -1,6 +1,6 @@
 # Easy Translator
 
-A Power Platform ToolBox tool to allow translations of your Model driven app
+A Power Platform ToolBox tool for translating your model-driven app
 
 Inspired by and crafted with the @MsCRMTools version for XrmToolBox
 
