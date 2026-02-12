@@ -47,7 +47,9 @@ export class dvService {
   async getAllTables(): Promise<Table[]> {
     this.onLog(`Fetching all tables from environment`, "info");
     if (!this.connection) {
-      throw new Error("No connection available");
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
     }
 
     try {
@@ -72,7 +74,9 @@ export class dvService {
         );
       });
 
-      const filteredTables = tables.filter((table) => table.code !== "solutioncomponent" && table.code !== "entity");
+      const filteredTables = tables.filter(
+        (table) => table.logicalName !== "solutioncomponent" && table.logicalName !== "entity",
+      );
       return filteredTables.sort((a, b) => a.label.localeCompare(b.label));
     } catch (err) {
       this.onLog(`Error fetching all tables: ${(err as Error).message}`, "error");
@@ -267,7 +271,7 @@ export class dvService {
           {
             name: "DisplayName",
             translation: [
-              ...((fld as any)?.DisplayName?.LocalizedLabels as any[]).map(
+              ...((fld as any)?.DisplayName?.LocalizedLabels || []).map(
                 (label: any) => new LangTranslation(label.LanguageCode, label.Label),
               ),
             ],
@@ -275,7 +279,7 @@ export class dvService {
           {
             name: "Description",
             translation: [
-              ...((fld as any)?.Description?.LocalizedLabels as any[]).map(
+              ...((fld as any)?.Description?.LocalizedLabels || []).map(
                 (label: any) => new LangTranslation(label.LanguageCode, label.Label),
               ),
             ],
@@ -370,7 +374,7 @@ export class dvService {
             {
               name: "DisplayName",
               translation: [
-                ...((amc as any)?.Label?.LocalizedLabels as any[]).map(
+                ...((amc as any)?.Label?.LocalizedLabels || []).map(
                   (label: any) => new LangTranslation(label.LanguageCode, label.Label),
                 ),
               ],
@@ -553,7 +557,7 @@ export class dvService {
       4: "Quick Find Search View",
       64: "Lookup view",
       2048: "Saved query used for workflow templates and email templates",
-      8192: "Outlook offine template",
+      8192: "Outlook offline template",
     };
 
     await Promise.all(
@@ -1093,26 +1097,40 @@ export class dvService {
         : "Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata";
 
     const rel = relationship.value[0];
-    const amc = rel?.AssociatedMenuConfiguration as any;
 
-    // Update labels with the provided translations
-    if (amc?.Label?.LocalizedLabels) {
-      // Update existing labels or add new ones
-      Object.entries(labels).forEach(([lcid, labelText]) => {
-        const languageCode = Number(lcid);
-        const existingLabel = amc.Label.LocalizedLabels.find((lbl: any) => lbl.LanguageCode === languageCode);
-
-        if (existingLabel) {
-          existingLabel.Label = labelText;
-        } else {
-          amc.Label.LocalizedLabels.push({
-            "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-            Label: labelText,
-            LanguageCode: languageCode,
-          });
-        }
-      });
+    // Select the appropriate associated menu configuration object(s) based on relationship type
+    const menuConfigs: any[] = [];
+    if (relationType === "ManyToManyRelationship") {
+      if (rel?.Entity1AssociatedMenuConfiguration) {
+        menuConfigs.push(rel.Entity1AssociatedMenuConfiguration);
+      }
+      if (rel?.Entity2AssociatedMenuConfiguration) {
+        menuConfigs.push(rel.Entity2AssociatedMenuConfiguration);
+      }
+    } else if (rel?.AssociatedMenuConfiguration) {
+      menuConfigs.push(rel.AssociatedMenuConfiguration);
     }
+
+    // Update labels with the provided translations on all relevant menu configurations
+    menuConfigs.forEach((amc) => {
+      if (amc?.Label?.LocalizedLabels) {
+        // Update existing labels or add new ones
+        Object.entries(labels).forEach(([lcid, labelText]) => {
+          const languageCode = Number(lcid);
+          const existingLabel = amc.Label.LocalizedLabels.find((lbl: any) => lbl.LanguageCode === languageCode);
+
+          if (existingLabel) {
+            existingLabel.Label = labelText;
+          } else {
+            amc.Label.LocalizedLabels.push({
+              "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+              Label: labelText,
+              LanguageCode: languageCode,
+            });
+          }
+        });
+      }
+    });
 
     await this.dvApi.updateRelationship(relTypeName, rel).catch((error) => {
       this.onLog(

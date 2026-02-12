@@ -116,13 +116,14 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
     if (!selectedSolution) {
       setTables([]);
       setFilteredTables([]);
-      setLoading(false);
+      setSelectedTables([]);
       setError(null);
       return;
     }
     const fetchTables = async () => {
       setLoading(true);
       setError(null);
+      setSelectedTables([]);
       onLog(`Loading tables for ${selectedSolution.name}`);
       try {
         const solutionTables = await dvSvc.getSolutionTables(selectedSolution.solutionId);
@@ -157,6 +158,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
   const loadAllTables = React.useCallback(async () => {
     setLoading(true);
     setSelectedSolution(null);
+    setSelectedTables([]);
     setError(null);
     onLog(`Loading all tables from environment`);
     try {
@@ -360,7 +362,10 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
                         value={table.id}
                         style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
                       >
-                        {table.label} <span style={{ fontSize: "0.85em", color: "gray" }}> ({table.logicalName})</span>
+                        {table.label}{" "}
+                        <span style={{ fontSize: "0.85em", color: tokens.colorNeutralForeground3 }}>
+                          ({table.logicalName})
+                        </span>
                       </ListItem>
                     ))}
                   </List>

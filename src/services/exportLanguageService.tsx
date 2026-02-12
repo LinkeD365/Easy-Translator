@@ -193,7 +193,12 @@ export class exportLanguageService {
         table.relationships
           .filter((rel) => rel.type !== "ManyToManyRelationship")
           .forEach((rel) => {
-            rel.langProps.forEach((lgProp) => {
+            const langProps =
+              this.vm.options.labelOptions === LabelOptions.both ||
+              this.vm.options.labelOptions === LabelOptions.names
+                ? rel.langProps.filter((lp) => lp.name === "DisplayName")
+                : [];
+            langProps.forEach((lgProp) => {
               const row = [
                 table.logicalName,
                 `{${rel.id}}`,
@@ -220,7 +225,12 @@ export class exportLanguageService {
         table.relationships
           .filter((rel) => rel.type === "ManyToManyRelationship")
           .forEach((rel) => {
-            rel.langProps.forEach((lgProp) => {
+            const langProps =
+              this.vm.options.labelOptions === LabelOptions.both ||
+              this.vm.options.labelOptions === LabelOptions.names
+                ? rel.langProps.filter((lp) => lp.name === "DisplayName")
+                : [];
+            langProps.forEach((lgProp) => {
               const row = [
                 table.logicalName,
                 `{${rel.id}}`,
