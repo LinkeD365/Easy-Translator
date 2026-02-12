@@ -851,7 +851,6 @@ export class importLanguageService {
     let processed = 0;
     const total = formUpdates.size;
 
-    console.log("fu", formUpdates);
     for (const [, data] of formUpdates) {
       try {
         await this.dvSvc.updateForm(data.formId, { formxml: data.formXml });
@@ -917,7 +916,7 @@ export class importLanguageService {
     let processedRows = 0;
 
     // Count total rows first
-    sheet.eachRow((row, rowNumber) => {
+    sheet.eachRow((_, rowNumber) => {
       if (rowNumber > 1) totalRows++;
     });
 

@@ -174,73 +174,70 @@ export class exportLanguageService {
 
   private async exportRelationships(workbook: ExcelJS.Workbook) {
     if (!this.vm.options.relationships) return;
-    return new Promise<void>(async (resolve, reject) => {
-      try {
-        let wsheet = workbook.addWorksheet("Relationships");
-        console.log("Exporting relationships with label option", this.vm.options.labelOptions);
-        wsheet.addRow([
-          "Entity",
-          "Relationship Id",
-          "Relationship Name",
-          "Relationship entity",
-          ...this.outputLangs.map((lang) => lang.code),
-        ]);
-        await Promise.all(
-          this.vm.selectedTables.map(async (table) => {
-            await this.dvSvc.getRelationships(table);
-          }),
-        );
+    try {
+      let wsheet = workbook.addWorksheet("Relationships");
+      wsheet.addRow([
+        "Entity",
+        "Relationship Id",
+        "Relationship Name",
+        "Relationship entity",
+        ...this.outputLangs.map((lang) => lang.code),
+      ]);
+      await Promise.all(
+        this.vm.selectedTables.map(async (table) => {
+          await this.dvSvc.getRelationships(table);
+        }),
+      );
 
-        this.vm.selectedTables.forEach((table) => {
-          table.relationships
-            .filter((rel) => rel.type !== "ManyToManyRelationship")
-            .forEach((rel) => {
-              rel.langProps.forEach((lgProp) => {
-                const row = [
-                  table.logicalName,
-                  `{${rel.id}}`,
-                  ...Object.values(rel.props ?? {}).map((prop) => prop),
-                  ...lgProp.translation.map((trans) => trans.translation),
-                ];
+      this.vm.selectedTables.forEach((table) => {
+        table.relationships
+          .filter((rel) => rel.type !== "ManyToManyRelationship")
+          .forEach((rel) => {
+            rel.langProps.forEach((lgProp) => {
+              const row = [
+                table.logicalName,
+                `{${rel.id}}`,
+                ...Object.values(rel.props ?? {}).map((prop) => prop),
+                ...lgProp.translation.map((trans) => trans.translation),
+              ];
 
-                wsheet.addRow(row);
-              });
+              wsheet.addRow(row);
             });
-        });
+          });
+      });
 
-        this.styleSheet(wsheet);
+      this.styleSheet(wsheet);
 
-        wsheet = workbook.addWorksheet("RelationshipsNN");
-        wsheet.addRow([
-          "Entity",
-          "Relationship Id",
-          "Relationship Intersect Entity",
-          ...this.outputLangs.map((lang) => lang.code),
-        ]);
+      wsheet = workbook.addWorksheet("RelationshipsNN");
+      wsheet.addRow([
+        "Entity",
+        "Relationship Id",
+        "Relationship Intersect Entity",
+        ...this.outputLangs.map((lang) => lang.code),
+      ]);
 
-        this.vm.selectedTables.forEach((table) => {
-          table.relationships
-            .filter((rel) => rel.type === "ManyToManyRelationship")
-            .forEach((rel) => {
-              rel.langProps.forEach((lgProp) => {
-                const row = [
-                  table.logicalName,
-                  `{${rel.id}}`,
-                  rel.props?.IntersectEntityName,
-                  ...lgProp.translation.map((trans) => trans.translation),
-                ];
+      this.vm.selectedTables.forEach((table) => {
+        table.relationships
+          .filter((rel) => rel.type === "ManyToManyRelationship")
+          .forEach((rel) => {
+            rel.langProps.forEach((lgProp) => {
+              const row = [
+                table.logicalName,
+                `{${rel.id}}`,
+                rel.props?.IntersectEntityName,
+                ...lgProp.translation.map((trans) => trans.translation),
+              ];
 
-                wsheet.addRow(row);
-              });
+              wsheet.addRow(row);
             });
-        });
-        this.onLog("Relationships loaded", "success");
-        this.styleSheet(wsheet);
-        resolve();
-      } catch (err) {
-        reject(err);
-      }
-    });
+          });
+      });
+      this.onLog("Relationships loaded", "success");
+      this.styleSheet(wsheet);
+    } catch (err) {
+      this.onLog("Failed to export relationships", "error");
+      throw err;
+    }
   }
 
   private async exportBooleans(workbook: ExcelJS.Workbook) {
@@ -939,7 +936,7 @@ export class exportLanguageService {
     if (!this.vm.options.dashboards) return;
     let wsheet = workbook.addWorksheet("Dashboards");
     wsheet.addRow(["Form Unique Id", "Form Id", "Type", ...this.outputLangs.map((lang) => lang.code)]);
-  
+
     this.onLog("Fetching dashboards...", "info");
 
     if (this.vm.dashboards.length === 0) {
