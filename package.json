@@ -22,8 +22,8 @@
   "configurations": {
     "repository": "https://github.com/LinkeD365/Easy-Translator",
     "website": "https://github.com/LinkeD365/Easy-Translator",
-    "readmeUrl": "https://raw.githubusercontent.com/LinkeD365/Easy-Translator/refs/heads/master/README.md",
-    "iconUrl": "https://raw.githubusercontent.com/LinkeD365/Easy-Translator/refs/heads/master/assets/icon.png"
+    "readmeUrl": "https://raw.githubusercontent.com/LinkeD365/Easy-Translator/refs/heads/main/README.md",
+    "iconUrl": "https://raw.githubusercontent.com/LinkeD365/Easy-Translator/refs/heads/main/assets/icon.png"
   },
   "repository": {
     "type": "git",
