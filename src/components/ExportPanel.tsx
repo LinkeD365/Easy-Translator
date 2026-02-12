@@ -112,18 +112,22 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
     }
   }, [debouncedSearch, tables]);
 
+  const resetTableSelection = React.useCallback(() => {
+    setSelectedTables([]);
+  }, []);
+
   React.useEffect(() => {
     if (!selectedSolution) {
       setTables([]);
       setFilteredTables([]);
-      setSelectedTables([]);
+      resetTableSelection();
       setError(null);
       return;
     }
     const fetchTables = async () => {
       setLoading(true);
       setError(null);
-      setSelectedTables([]);
+      resetTableSelection();
       onLog(`Loading tables for ${selectedSolution.name}`);
       try {
         const solutionTables = await dvSvc.getSolutionTables(selectedSolution.solutionId);
@@ -141,7 +145,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
     };
 
     fetchTables();
-  }, [dvSvc, onLog, selectedSolution]);
+  }, [dvSvc, onLog, selectedSolution, resetTableSelection]);
 
   const exportExcel = React.useCallback(async () => {
     try {
@@ -158,7 +162,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
   const loadAllTables = React.useCallback(async () => {
     setLoading(true);
     setSelectedSolution(null);
-    setSelectedTables([]);
+    resetTableSelection();
     setError(null);
     onLog(`Loading all tables from environment`);
     try {
@@ -174,7 +178,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
     } finally {
       setLoading(false);
     }
-  }, [dvSvc, onLog]);
+  }, [dvSvc, onLog, resetTableSelection]);
 
   const selectLang = React.useCallback(
     (code?: string): void => {

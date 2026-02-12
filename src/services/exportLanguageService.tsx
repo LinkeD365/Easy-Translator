@@ -1,4 +1,4 @@
-import { LabelOptions, LanguageDef, ViewModel } from "../model/viewModel";
+import { LabelOptions, LangTranslation, LanguageDef, ViewModel } from "../model/viewModel";
 import { dvService } from "./dataverseService";
 import ExcelJS from "exceljs";
 
@@ -172,6 +172,13 @@ export class exportLanguageService {
     });
   }
 
+  private filterRelationshipLangProps(langProps: any[]): any[] {
+    return this.vm.options.labelOptions === LabelOptions.both ||
+      this.vm.options.labelOptions === LabelOptions.names
+      ? langProps.filter((lp) => lp.name === "DisplayName")
+      : [];
+  }
+
   private async exportRelationships(workbook: ExcelJS.Workbook) {
     if (!this.vm.options.relationships) return;
     try {
@@ -193,17 +200,13 @@ export class exportLanguageService {
         table.relationships
           .filter((rel) => rel.type !== "ManyToManyRelationship")
           .forEach((rel) => {
-            const langProps =
-              this.vm.options.labelOptions === LabelOptions.both ||
-              this.vm.options.labelOptions === LabelOptions.names
-                ? rel.langProps.filter((lp) => lp.name === "DisplayName")
-                : [];
+            const langProps = this.filterRelationshipLangProps(rel.langProps);
             langProps.forEach((lgProp) => {
               const row = [
                 table.logicalName,
                 `{${rel.id}}`,
                 ...Object.values(rel.props ?? {}).map((prop) => prop),
-                ...lgProp.translation.map((trans) => trans.translation),
+                ...lgProp.translation.map((trans: LangTranslation) => trans.translation),
               ];
 
               wsheet.addRow(row);
@@ -225,17 +228,13 @@ export class exportLanguageService {
         table.relationships
           .filter((rel) => rel.type === "ManyToManyRelationship")
           .forEach((rel) => {
-            const langProps =
-              this.vm.options.labelOptions === LabelOptions.both ||
-              this.vm.options.labelOptions === LabelOptions.names
-                ? rel.langProps.filter((lp) => lp.name === "DisplayName")
-                : [];
+            const langProps = this.filterRelationshipLangProps(rel.langProps);
             langProps.forEach((lgProp) => {
               const row = [
                 table.logicalName,
                 `{${rel.id}}`,
                 rel.props?.IntersectEntityName,
-                ...lgProp.translation.map((trans) => trans.translation),
+                ...lgProp.translation.map((trans: LangTranslation) => trans.translation),
               ];
 
               wsheet.addRow(row);
