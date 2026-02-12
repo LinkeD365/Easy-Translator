@@ -5,6 +5,7 @@ import { ViewModel } from "../model/viewModel";
 import { dvService } from "../services/dataverseService";
 import { Tab, TabList } from "@fluentui/react-components";
 import { ExportPanel } from "./ExportPanel";
+import { ImportPanel } from "./ImportPanel";
 import { languageService } from "../services/languageService";
 
 interface EasyTranslatorProps {
@@ -28,6 +29,7 @@ export const EasyTranslator = observer((props: EasyTranslatorProps): React.JSX.E
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       {tabs}
       {selectedTab === "export" && <ExportPanel dvSvc={dvSvc} lgSvc={lgSvc} vm={vm} onLog={onLog} />}
+      {selectedTab === "import" && <ImportPanel dvSvc={dvSvc} lgSvc={lgSvc} vm={vm} onLog={onLog} />}
     </div>
   );
 });

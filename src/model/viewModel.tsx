@@ -5,6 +5,8 @@ export class ViewModel {
   exporting: boolean = false;
   message: string = "";
   exportpercentage: number = 0;
+  batchProgress: number = 0;
+  batchMessage: string = "";
   options: Options = new Options();
   selectedLanguage?: LanguageDef;
   allLanguages: LanguageDef[] = [];

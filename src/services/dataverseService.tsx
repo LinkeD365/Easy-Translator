@@ -788,7 +788,6 @@ export class dvService {
             resolve([]);
             return;
           }
-          console.log("Dashboard fetchXml result:", data);
           const dashboardsXml = [
             "<fetch>",
             "  <entity name='systemform'>",
@@ -843,5 +842,279 @@ export class dvService {
         reject(error);
       }
     });
+  }
+
+  /**
+   * Update entity metadata (DisplayName, DisplayCollectionName, Description)
+   */
+  async updateEntityMetadata(
+    entityLogicalName: string,
+    displayName: Record<number, string> | null,
+    displayCollectionName: Record<number, string> | null,
+    description: Record<number, string> | null,
+  ): Promise<void> {
+    const body: Record<string, any> = {};
+    if (displayName) {
+      body.DisplayName = {
+        "@odata.type": "Microsoft.Dynamics.CRM.Label",
+        LocalizedLabels: Object.entries(displayName).map(([lcid, label]) => ({
+          "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+          Label: label,
+          LanguageCode: Number(lcid),
+        })),
+      };
+    }
+    if (displayCollectionName) {
+      body.DisplayCollectionName = {
+        "@odata.type": "Microsoft.Dynamics.CRM.Label",
+        LocalizedLabels: Object.entries(displayCollectionName).map(([lcid, label]) => ({
+          "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+          Label: label,
+          LanguageCode: Number(lcid),
+        })),
+      };
+    }
+    if (description) {
+      body.Description = {
+        "@odata.type": "Microsoft.Dynamics.CRM.Label",
+        LocalizedLabels: Object.entries(description).map(([lcid, label]) => ({
+          "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+          Label: label,
+          LanguageCode: Number(lcid),
+        })),
+      };
+    }
+    //body.MergeLabels = true;
+    await this.dvApi.updateEntityDefinition(entityLogicalName, body).catch((error) => {
+      this.onLog(
+        `Failed to update entity metadata for ${entityLogicalName} error: ${(error as Error).message}`,
+        "warning",
+      );
+    });
+  }
+
+  /**
+   * Update attribute metadata (DisplayName, Description) via Dataverse Web API
+   */
+  async updateAttributeMetadata(
+    entityLogicalName: string,
+    attributeLogicalName: string,
+    displayName: Record<number, string> | null,
+    description: Record<number, string> | null,
+  ): Promise<void> {
+    const body: Record<string, any> = { LogicalName: attributeLogicalName };
+    if (displayName) {
+      body.DisplayName = {
+        "@odata.type": "Microsoft.Dynamics.CRM.Label",
+        LocalizedLabels: Object.entries(displayName).map(([lcid, label]) => ({
+          "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+          Label: label,
+          LanguageCode: Number(lcid),
+        })),
+      };
+    }
+    if (description) {
+      body.Description = {
+        "@odata.type": "Microsoft.Dynamics.CRM.Label",
+        LocalizedLabels: Object.entries(description).map(([lcid, label]) => ({
+          "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+          Label: label,
+          LanguageCode: Number(lcid),
+        })),
+      };
+    }
+
+    await this.dvApi.updateAttribute(entityLogicalName, attributeLogicalName, body).catch((error) => {
+      this.onLog(
+        `Failed to update attribute metadata for ${entityLogicalName}.${attributeLogicalName} error: ${(error as Error).message}`,
+        "warning",
+      );
+    });
+  }
+
+  /**
+   * Update option set value label via SetLocLabels
+   */
+  async setLocLabels(
+    entitySetName: string,
+    objectId: string,
+    attributeName: string,
+    labels: Record<number, string>,
+  ): Promise<void> {
+    const locLabels = Object.entries(labels).map(([lcid, label]) => ({
+      "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+      Label: label,
+      LanguageCode: Number(lcid),
+    }));
+
+    await this.dvApi.execute({
+      operationName: "SetLocLabels",
+      operationType: "action",
+      parameters: {
+        EntityMoniker: {
+          "@odata.type": "Microsoft.Dynamics.CRM.crmbaseentity",
+          "@odata.id": `${entitySetName}(${objectId})`,
+        },
+        AttributeName: attributeName,
+        Labels: locLabels,
+      },
+    });
+  }
+
+  /**
+   * Update an option value label for local/global option set
+   */
+  async updateOptionValue(
+    entityLogicalName: string | null,
+    attributeLogicalName: string | null,
+    optionSetName: string | null,
+    value: number,
+    labels: Record<number, string>,
+    isDescription: boolean = false,
+  ): Promise<void> {
+    const locLabels = Object.entries(labels).map(([lcid, label]) => ({
+      "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+      Label: label,
+      LanguageCode: Number(lcid),
+    }));
+
+    const params: Record<string, any> = {
+      Value: value,
+      MergeLabels: true,
+    };
+
+    if (isDescription) {
+      params.Description = {
+        "@odata.type": "Microsoft.Dynamics.CRM.Label",
+        LocalizedLabels: locLabels,
+      };
+    } else {
+      params.Label = {
+        "@odata.type": "Microsoft.Dynamics.CRM.Label",
+        LocalizedLabels: locLabels,
+      };
+    }
+
+    if (optionSetName) {
+      params.OptionSetName = optionSetName;
+    } else {
+      params.EntityLogicalName = entityLogicalName;
+      params.AttributeLogicalName = attributeLogicalName;
+    }
+
+    await this.dvApi.updateOptionValue(params).catch((error) => {
+      this.onLog(
+        `Failed to update option value label for ${entityLogicalName}.${attributeLogicalName} value: ${value} error: ${(error as Error).message}`,
+        "warning",
+      );
+    });
+  }
+
+  /**
+   * Get localized label from AssociatedMenuConfiguration by language code
+   */
+  private getLabelByLanguageCode(localizedLabels: any[] | undefined, languageCode: number): string | undefined {
+    if (!localizedLabels || !Array.isArray(localizedLabels)) {
+      return undefined;
+    }
+    const label = localizedLabels.find((lbl: any) => lbl.LanguageCode === languageCode);
+    return label?.Label;
+  }
+
+  /**
+   * Update relationship metadata
+   */
+  async updateRelationshipLabel(
+    schemaName: string,
+    labels: Record<number, string>,
+    relationType: string,
+  ): Promise<void> {
+    const locLabels = Object.entries(labels).map(([lcid, label]) => ({
+      "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+      Label: label,
+      LanguageCode: Number(lcid),
+    }));
+    console.log("Updating relationship label with params:", { schemaName, labels, relationType });
+    const relationship = await this.dvApi.queryData(`RelationshipDefinitions?$filter=SchemaName eq '${schemaName}'`);
+
+    console.log("Fetched relationship metadata for update:", relationship);
+    const relTypeName =
+      relationType === "ManyToManyRelationship"
+        ? "Microsoft.Dynamics.CRM.ManyToManyRelationshipMetadata"
+        : "Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata";
+
+    // Find and replace labels matching language codes in AssociatedMenuConfiguration
+    if (relationship?.value && Array.isArray(relationship.value)) {
+      const rel = relationship.value[0];
+      const amc = rel?.AssociatedMenuConfiguration as any;
+      if (amc?.Label?.LocalizedLabels) {
+        amc.Label.LocalizedLabels.forEach((localizedLabel: any) => {
+          const matchingLabel = this.getLabelByLanguageCode(amc.Label.LocalizedLabels, localizedLabel.LanguageCode);
+          if (matchingLabel) {
+            localizedLabel.Label = matchingLabel;
+          }
+        });
+      }
+      await this.dvApi.updateRelationship(relTypeName, rel).catch((error) => {
+        this.onLog(
+          `Failed to update relationship metadata for ${schemaName} error: ${(error as Error).message}`,
+          "warning",
+        );
+      });
+    }
+  }
+
+  /**
+   * Update a form record (for form name/description or form XML content)
+   */
+  async updateForm(formId: string, updates: Record<string, unknown>): Promise<void> {
+    await this.dvApi.update("systemform", formId, updates);
+  }
+
+  /**
+   * Update a view record
+   */
+  async updateView(viewId: string, updates: Record<string, unknown>): Promise<void> {
+    await this.dvApi.update("savedquery", viewId, updates);
+  }
+
+  /**
+   * Update a chart record
+   */
+  async updateChart(chartId: string, updates: Record<string, unknown>): Promise<void> {
+    await this.dvApi.update("savedqueryvisualization", chartId, updates);
+  }
+
+  /**
+   * Update a sitemap record
+   */
+  async updateSiteMap(siteMapId: string, sitemapXml: string): Promise<void> {
+    await this.dvApi.update("sitemap", siteMapId, { sitemapxml: sitemapXml });
+  }
+
+  /**
+   * Retrieve a form by ID
+   */
+  async getFormById(formId: string): Promise<Record<string, unknown>> {
+    return await this.dvApi.retrieve("systemform", formId, ["formid", "formxml", "name", "formidunique", "type"]);
+  }
+
+  /**
+   * Retrieve a sitemap by ID
+   */
+  async getSiteMapById(siteMapId: string): Promise<Record<string, unknown>> {
+    return await this.dvApi.retrieve("sitemap", siteMapId, [
+      "sitemapid",
+      "sitemapxml",
+      "sitemapname",
+      "sitemapnameunique",
+    ]);
+  }
+
+  /**
+   * Publish all customizations
+   */
+  async publishAllCustomizations(): Promise<void> {
+    await this.dvApi.publishCustomizations();
   }
 }
