@@ -1,4 +1,4 @@
-import { LabelOptions, LangTranslation, LanguageDef, ViewModel } from "../model/viewModel";
+import { LabelOptions, LangProp, LangTranslation, LanguageDef, ViewModel } from "../model/viewModel";
 import { dvService } from "./dataverseService";
 import ExcelJS from "exceljs";
 
@@ -172,7 +172,7 @@ export class exportLanguageService {
     });
   }
 
-  private filterRelationshipLangProps(langProps: any[]): any[] {
+  private filterRelationshipLangProps(langProps: LangProp[]): LangProp[] {
     return this.vm.options.labelOptions === LabelOptions.both ||
       this.vm.options.labelOptions === LabelOptions.names
       ? langProps.filter((lp) => lp.name === "DisplayName")

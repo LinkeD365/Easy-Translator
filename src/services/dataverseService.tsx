@@ -1099,6 +1099,8 @@ export class dvService {
     const rel = relationship.value[0];
 
     // Select the appropriate associated menu configuration object(s) based on relationship type
+    // Note: Using 'any' type here because Dataverse API relationship metadata structure is complex
+    // and varies between ManyToMany and OneToMany relationships
     const menuConfigs: any[] = [];
     if (relationType === "ManyToManyRelationship") {
       if (rel?.Entity1AssociatedMenuConfiguration) {
