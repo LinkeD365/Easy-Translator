@@ -39,6 +39,42 @@ export class dvService {
     }
   }
 
+  async getAllTables(): Promise<Table[]> {
+    this.onLog(`Fetching all tables from environment`, "info");
+    if (!this.connection) {
+      throw new Error("No connection available");
+    }
+
+    try {
+      const componentsData = await this.dvApi.getAllEntitiesMetadata([
+        "DisplayName",
+        "EntitySetName",
+        "LogicalName",
+        "MetadataId",
+        "ObjectTypeCode",
+      ]);
+      const componentArray = Array.isArray((componentsData as any).value)
+        ? ((componentsData as any).value as Record<string, any>[])
+        : [];
+      console.log(componentArray);
+      const tables = componentArray.map((comp) => {
+        return new Table(
+          comp.DisplayName?.LocalizedLabels?.[0]?.Label || comp.LogicalName || "",
+          comp.EntitySetName || "",
+          comp.LogicalName || "",
+          comp.MetadataId || "",
+          comp.ObjectTypeCode || "",
+        );
+      });
+
+      const filteredTables = tables.filter((table) => table.code !== "solutioncomponent" && table.code !== "entity");
+      return filteredTables.sort((a, b) => a.label.localeCompare(b.label));
+    } catch (err) {
+      this.onLog(`Error fetching all tables: ${(err as Error).message}`, "error");
+      throw err;
+    }
+  }
+
   async getSolutionTables(solutionId: string): Promise<Table[]> {
     this.onLog(`Fetching tables for solution: ${solutionId}`, "info");
     if (!this.connection) {

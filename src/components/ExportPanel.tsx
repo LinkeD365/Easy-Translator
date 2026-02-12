@@ -11,6 +11,7 @@ import {
   Divider,
   Dropdown,
   Field,
+  Input,
   List,
   ListItem,
   Option,
@@ -38,6 +39,8 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
   const [selectedSolution, setSelectedSolution] = React.useState<Solution | null>(null);
   const [selectedTables, setSelectedTables] = React.useState<SelectionItemId[]>([]);
   const [tables, setTables] = React.useState<Table[]>([]);
+  const [filteredTables, setFilteredTables] = React.useState<Table[]>([]);
+  const [searchQuery, setSearchQuery] = React.useState<string>("");
   const [loading, setLoading] = React.useState<boolean>(false);
   const [labelOption, setLabelOption] = React.useState<string>(String(vm.options.labelOptions));
   const [languages, setLanguages] = React.useState<LanguageDef[]>([]);
@@ -62,6 +65,23 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
   }, [dvSvc, onLog]);
 
   React.useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      if (searchQuery.trim() === "") {
+        setFilteredTables(tables);
+      } else {
+        const query = searchQuery.toLowerCase();
+        setFilteredTables(
+          tables.filter(
+            (table) => table.label.toLowerCase().includes(query) || table.logicalName.toLowerCase().includes(query),
+          ),
+        );
+      }
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery, tables]);
+
+  React.useEffect(() => {
     if (!selectedSolution) {
       setTables([]);
       setLoading(false);
@@ -73,6 +93,8 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
       try {
         const solutionTables = await dvSvc.getSolutionTables(selectedSolution.solutionId);
         setTables(solutionTables);
+        setFilteredTables(solutionTables);
+        setSearchQuery("");
         onLog("Tables loaded", "success");
       } catch (err) {
         onLog("Failed to load tables", "error");
@@ -91,6 +113,24 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
     await lgSvc.exportTranslations();
     //window.toolboxAPI.utils.hideLoading();
   }
+
+  async function loadAllTables() {
+    setLoading(true);
+    setSelectedSolution(null);
+    onLog(`Loading all tables from environment`);
+    try {
+      const allTables = await dvSvc.getAllTables();
+      setTables(allTables);
+      setFilteredTables(allTables);
+      setSearchQuery("");
+      onLog("All tables loaded", "success");
+    } catch (err) {
+      onLog("Failed to load all tables", "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function selectLang(code?: string): void {
     console.log(code);
     vm.selectedLanguage = vm.allLanguages?.find((lang) => lang.code === code);
@@ -157,6 +197,22 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
     );
   }
 
+  function toggleAllTables(checked: boolean): void {
+    if (checked) {
+      setSelectedTables(filteredTables.map((table) => table.id));
+    } else {
+      setSelectedTables([]);
+    }
+  }
+
+  function allTablesChecked(): boolean {
+    return filteredTables.length > 0 && selectedTables.length === filteredTables.length;
+  }
+
+  function someTablesChecked(): boolean {
+    return selectedTables.length > 0 && selectedTables.length < filteredTables.length;
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: "16px" }}>
       <Toolbar style={{ justifyContent: "space-between" }}>
@@ -175,6 +231,9 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
               </Option>
             ))}
           </Combobox>
+          <Button appearance="secondary" disabled={vm.exporting || loading} onClick={loadAllTables}>
+            All Tables
+          </Button>
         </ToolbarGroup>
         <ToolbarGroup>
           <Button
@@ -195,7 +254,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
       {!vm.exporting && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "16px", flex: 1, minHeight: 0 }}>
           <div style={{ overflow: "auto", border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: "4px" }}>
-            {!selectedSolution ? (
+            {tables.length === 0 && !loading ? (
               <div
                 style={{
                   display: "flex",
@@ -206,7 +265,9 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
                   textAlign: "center",
                 }}
               >
-                <Caption1 style={{ textAlign: "center" }}>Please select a solution to view available tables</Caption1>
+                <Caption1 style={{ textAlign: "center" }}>
+                  Please select a solution or click All Tables to view available tables
+                </Caption1>
               </div>
             ) : loading ? (
               <div
@@ -222,18 +283,44 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
                 <Caption1 style={{ textAlign: "center" }}>Loading tables...</Caption1>
               </div>
             ) : (
-              <List
-                selectionMode="multiselect"
-                selectedItems={selectedTables}
-                onSelectionChange={(_, data) => setSelectedTables(data.selectedItems)}
-                aria-label="List of Tables"
-              >
-                {tables.map((table) => (
-                  <ListItem key={table.id} value={table.id}>
-                    {table.label}
-                  </ListItem>
-                ))}
-              </List>
+              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                <div
+                  style={{
+                    borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <Checkbox
+                    checked={allTablesChecked() ? true : someTablesChecked() ? "mixed" : false}
+                    onChange={(_, data) => toggleAllTables(data.checked === true)}
+                  />
+                  <Input
+                    placeholder="Search tables..."
+                    value={searchQuery}
+                    onChange={(_, data) => setSearchQuery(data.value)}
+                    style={{ flex: 1 }}
+                  />
+                </div>
+                <List
+                  selectionMode="multiselect"
+                  selectedItems={selectedTables}
+                  onSelectionChange={(_, data) => setSelectedTables(data.selectedItems)}
+                  aria-label="List of Tables"
+                  style={{ flex: 1, overflow: "auto" }}
+                >
+                  {filteredTables.map((table) => (
+                    <ListItem
+                      key={table.id}
+                      value={table.id}
+                      style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                    >
+                      {table.label} <span style={{ fontSize: "0.85em", color: "gray" }}> ({table.logicalName})</span>
+                    </ListItem>
+                  ))}
+                </List>
+              </div>
             )}
           </div>
           <div style={{ overflow: "auto", height: "100%" }}>
@@ -327,7 +414,6 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
             <Divider>Label & Languages</Divider>
 
             <Field label="Label Options">
-              {languages.length}
               <RadioGroup
                 value={labelOption}
                 defaultValue={String(LabelOptions.both)}
