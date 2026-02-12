@@ -33,6 +33,37 @@ interface ExportPanelProps {
   lgSvc: languageService;
   onLog: (message: string, type?: "info" | "success" | "warning" | "error") => void;
 }
+
+interface EmptyStateProps {
+  message: string;
+}
+
+const EmptyState: React.FC<EmptyStateProps> = ({ message }) => (
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      height: "100%",
+      padding: "20px",
+      textAlign: "center",
+    }}
+  >
+    <Caption1>{message}</Caption1>
+  </div>
+);
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = React.useState(value);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element => {
   const { dvSvc, vm, lgSvc, onLog } = props;
   const [solutions, setSolutions] = React.useState<Solution[]>([]);
@@ -42,53 +73,56 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
   const [filteredTables, setFilteredTables] = React.useState<Table[]>([]);
   const [searchQuery, setSearchQuery] = React.useState<string>("");
   const [loading, setLoading] = React.useState<boolean>(false);
+  const [error, setError] = React.useState<string | null>(null);
   const [labelOption, setLabelOption] = React.useState<string>(String(vm.options.labelOptions));
   const [languages, setLanguages] = React.useState<LanguageDef[]>([]);
+
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
   React.useEffect(() => {
     onLog("Export panel loaded");
     const fetchSolutions = async () => {
       try {
-        const sols = await dvSvc.getSolutions(); // Assumes getSolutions returns array of { uniqueName, friendlyName }
+        const sols = await dvSvc.getSolutions();
         setSolutions(sols);
         onLog("Solutions loaded", "success");
         const langs = await dvSvc.getLanguages();
-        console.log("langs", langs);
         setLanguages(langs);
         vm.allLanguages = langs;
         onLog("Languages loaded", "success");
       } catch (err) {
-        onLog("Failed to load solutions", "error");
+        const errorMsg = err instanceof Error ? err.message : "Failed to load initial data";
+        setError(errorMsg);
+        onLog(errorMsg, "error");
       }
     };
     fetchSolutions();
-  }, [dvSvc, onLog]);
+  }, [dvSvc, onLog, vm]);
 
   React.useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      if (searchQuery.trim() === "") {
-        setFilteredTables(tables);
-      } else {
-        const query = searchQuery.toLowerCase();
-        setFilteredTables(
-          tables.filter(
-            (table) => table.label.toLowerCase().includes(query) || table.logicalName.toLowerCase().includes(query),
-          ),
-        );
-      }
-    }, 300);
-
-    return () => clearTimeout(debounceTimer);
-  }, [searchQuery, tables]);
+    if (debouncedSearch.trim() === "") {
+      setFilteredTables(tables);
+    } else {
+      const query = debouncedSearch.toLowerCase();
+      setFilteredTables(
+        tables.filter(
+          (table) => table.label.toLowerCase().includes(query) || table.logicalName.toLowerCase().includes(query),
+        ),
+      );
+    }
+  }, [debouncedSearch, tables]);
 
   React.useEffect(() => {
     if (!selectedSolution) {
       setTables([]);
+      setFilteredTables([]);
       setLoading(false);
+      setError(null);
       return;
     }
     const fetchTables = async () => {
       setLoading(true);
+      setError(null);
       onLog(`Loading tables for ${selectedSolution.name}`);
       try {
         const solutionTables = await dvSvc.getSolutionTables(selectedSolution.solutionId);
@@ -97,7 +131,9 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
         setSearchQuery("");
         onLog("Tables loaded", "success");
       } catch (err) {
-        onLog("Failed to load tables", "error");
+        const errorMsg = err instanceof Error ? err.message : "Failed to load tables";
+        setError(errorMsg);
+        onLog(errorMsg, "error");
       } finally {
         setLoading(false);
       }
@@ -106,17 +142,22 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
     fetchTables();
   }, [dvSvc, onLog, selectedSolution]);
 
-  async function exportExcel() {
-    vm.selectedTables = tables.filter((table) => selectedTables.includes(table.id));
-    //await window.toolboxAPI.utils.showLoading("Exporting translations...");
-    vm.solution = selectedSolution || undefined;
-    await lgSvc.exportTranslations();
-    //window.toolboxAPI.utils.hideLoading();
-  }
+  const exportExcel = React.useCallback(async () => {
+    try {
+      vm.selectedTables = tables.filter((table) => selectedTables.includes(table.id));
+      vm.solution = selectedSolution || undefined;
+      await lgSvc.exportTranslations();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Export failed";
+      setError(errorMsg);
+      onLog(errorMsg, "error");
+    }
+  }, [tables, selectedTables, selectedSolution, vm, lgSvc, onLog]);
 
-  async function loadAllTables() {
+  const loadAllTables = React.useCallback(async () => {
     setLoading(true);
     setSelectedSolution(null);
+    setError(null);
     onLog(`Loading all tables from environment`);
     try {
       const allTables = await dvSvc.getAllTables();
@@ -125,16 +166,20 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
       setSearchQuery("");
       onLog("All tables loaded", "success");
     } catch (err) {
-      onLog("Failed to load all tables", "error");
+      const errorMsg = err instanceof Error ? err.message : "Failed to load all tables";
+      setError(errorMsg);
+      onLog(errorMsg, "error");
     } finally {
       setLoading(false);
     }
-  }
+  }, [dvSvc, onLog]);
 
-  function selectLang(code?: string): void {
-    console.log(code);
-    vm.selectedLanguage = vm.allLanguages?.find((lang) => lang.code === code);
-  }
+  const selectLang = React.useCallback(
+    (code?: string): void => {
+      vm.selectedLanguage = vm.allLanguages?.find((lang) => lang.code === code);
+    },
+    [vm],
+  );
 
   function toggleAllGlobalOptions(checked: boolean): void {
     vm.options.optionSets = checked;
@@ -197,21 +242,27 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
     );
   }
 
-  function toggleAllTables(checked: boolean): void {
-    if (checked) {
-      setSelectedTables(filteredTables.map((table) => table.id));
-    } else {
-      setSelectedTables([]);
-    }
-  }
+  const toggleAllTables = React.useCallback(
+    (checked: boolean): void => {
+      if (checked) {
+        setSelectedTables(filteredTables.map((table) => table.id));
+      } else {
+        setSelectedTables([]);
+      }
+    },
+    [filteredTables],
+  );
 
-  function allTablesChecked(): boolean {
-    return filteredTables.length > 0 && selectedTables.length === filteredTables.length;
-  }
+  const allTablesChecked = React.useCallback((): boolean => {
+    if (filteredTables.length === 0) return false;
+    return filteredTables.every((table) => selectedTables.includes(table.id));
+  }, [filteredTables, selectedTables]);
 
-  function someTablesChecked(): boolean {
-    return selectedTables.length > 0 && selectedTables.length < filteredTables.length;
-  }
+  const someTablesChecked = React.useCallback((): boolean => {
+    if (filteredTables.length === 0) return false;
+    const selectedInFiltered = filteredTables.filter((table) => selectedTables.includes(table.id)).length;
+    return selectedInFiltered > 0 && selectedInFiltered < filteredTables.length;
+  }, [filteredTables, selectedTables]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: "16px" }}>
@@ -246,6 +297,19 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
           </Button>
         </ToolbarGroup>
       </Toolbar>
+      {error && (
+        <div
+          style={{
+            padding: "12px",
+            backgroundColor: tokens.colorPaletteRedBackground2,
+            color: tokens.colorPaletteRedForeground1,
+            borderRadius: "4px",
+            margin: "0 16px",
+          }}
+        >
+          {error}
+        </div>
+      )}
       {vm.exporting && (
         <Field style={{ margin: "20px" }} validationMessage={vm.message} validationState="none">
           <ProgressBar thickness="large" value={vm.exportpercentage}></ProgressBar>
@@ -255,33 +319,9 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
         <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "16px", flex: 1, minHeight: 0 }}>
           <div style={{ overflow: "auto", border: `1px solid ${tokens.colorNeutralStroke1}`, borderRadius: "4px" }}>
             {tables.length === 0 && !loading ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: "100%",
-                  padding: "20px",
-                  textAlign: "center",
-                }}
-              >
-                <Caption1 style={{ textAlign: "center" }}>
-                  Please select a solution or click All Tables to view available tables
-                </Caption1>
-              </div>
+              <EmptyState message="Please select a solution or click All Tables to view available tables" />
             ) : loading ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: "100%",
-                  padding: "20px",
-                  textAlign: "center",
-                }}
-              >
-                <Caption1 style={{ textAlign: "center" }}>Loading tables...</Caption1>
-              </div>
+              <EmptyState message="Loading tables..." />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
                 <div
@@ -301,25 +341,30 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
                     value={searchQuery}
                     onChange={(_, data) => setSearchQuery(data.value)}
                     style={{ flex: 1 }}
+                    aria-label="Search tables"
                   />
                 </div>
-                <List
-                  selectionMode="multiselect"
-                  selectedItems={selectedTables}
-                  onSelectionChange={(_, data) => setSelectedTables(data.selectedItems)}
-                  aria-label="List of Tables"
-                  style={{ flex: 1, overflow: "auto" }}
-                >
-                  {filteredTables.map((table) => (
-                    <ListItem
-                      key={table.id}
-                      value={table.id}
-                      style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-                    >
-                      {table.label} <span style={{ fontSize: "0.85em", color: "gray" }}> ({table.logicalName})</span>
-                    </ListItem>
-                  ))}
-                </List>
+                {filteredTables.length === 0 && searchQuery.trim() !== "" ? (
+                  <EmptyState message={`No tables found matching "${searchQuery}"`} />
+                ) : (
+                  <List
+                    selectionMode="multiselect"
+                    selectedItems={selectedTables}
+                    onSelectionChange={(_, data) => setSelectedTables(data.selectedItems)}
+                    aria-label="List of Tables"
+                    style={{ flex: 1, overflow: "auto" }}
+                  >
+                    {filteredTables.map((table) => (
+                      <ListItem
+                        key={table.id}
+                        value={table.id}
+                        style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                      >
+                        {table.label} <span style={{ fontSize: "0.85em", color: "gray" }}> ({table.logicalName})</span>
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
               </div>
             )}
           </div>
@@ -419,7 +464,7 @@ export const ExportPanel = observer((props: ExportPanelProps): React.JSX.Element
                 defaultValue={String(LabelOptions.both)}
                 onChange={(_, data) => {
                   setLabelOption(data.value);
-                  vm.options.labelOptions = data.value as unknown as LabelOptions;
+                  vm.options.labelOptions = parseInt(data.value) as LabelOptions;
                 }}
               >
                 <Radio value={String(LabelOptions.both)} label="Both" />

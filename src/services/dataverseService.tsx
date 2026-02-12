@@ -20,6 +20,11 @@ export class dvService {
   }
 
   async getSolutions(): Promise<Solution[]> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     try {
       const solutionsData = await this.dvApi.queryData(
         "solutions?$filter=(isvisible eq true)&$select=friendlyname,uniquename&$orderby=createdon desc",
@@ -56,7 +61,7 @@ export class dvService {
       const componentArray = Array.isArray((componentsData as any).value)
         ? ((componentsData as any).value as Record<string, any>[])
         : [];
-      console.log(componentArray);
+      this.onLog(`Fetched ${componentArray.length} entities from environment`, "info");
       const tables = componentArray.map((comp) => {
         return new Table(
           comp.DisplayName?.LocalizedLabels?.[0]?.Label || comp.LogicalName || "",
@@ -81,7 +86,7 @@ export class dvService {
       throw new Error("No connection available");
     }
 
-    var fetchXml = [
+    const fetchXml = [
       "<fetch>",
       "  <entity name='entity'>",
       "    <attribute name='entityid'/>",
@@ -137,6 +142,11 @@ export class dvService {
   }
 
   async getLanguages(): Promise<LanguageDef[]> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     this.onLog("Fetching languages");
     try {
       const langData = await this.dvApi.execute({
@@ -159,6 +169,11 @@ export class dvService {
   }
 
   async getBaseLanguage(): Promise<LanguageDef> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     try {
       const fetchXml = [
         "<fetch>",
@@ -185,78 +200,133 @@ export class dvService {
   }
 
   async getTableMeta(table: Table): Promise<boolean> {
-    return new Promise<boolean>(async (resolve, reject) => {
-      try {
-        if (table.langProps.length > 0) {
-          resolve(true);
-          return;
-        }
-        const entityMeta = await this.dvApi.getEntityMetadata(table.id, false, [
-          "DisplayName",
-          "DisplayCollectionName",
-          "Description",
-          "SchemaName",
-          "LogicalName",
-          "ObjectTypeCode",
-        ]);
-        const displayNameLabels = ((entityMeta as any)?.DisplayName?.LocalizedLabels as any[]) || [];
-        table.langProps.push({
-          name: "DisplayName",
-          translation: [...displayNameLabels.map((label: any) => new LangTranslation(label.LanguageCode, label.Label))],
-        });
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
 
-        const displayCollectionLabels = ((entityMeta as any)?.DisplayCollectionName?.LocalizedLabels as any[]) || [];
-        table.langProps.push({
-          name: "DisplayCollectionName",
-          translation: [
-            ...displayCollectionLabels.map((label: any) => new LangTranslation(label.LanguageCode, label.Label)),
-          ],
-        });
+    if (table.langProps.length > 0) {
+      return true;
+    }
 
-        table.langProps.push({
-          name: "Description",
-          translation: [
-            ...((entityMeta as any)?.Description?.LocalizedLabels as any[]).map(
-              (label: any) => new LangTranslation(label.LanguageCode, label.Label),
-            ),
-          ],
-        });
-        resolve(true);
-      } catch (error) {
-        reject(error);
-      }
+    const entityMeta = await this.dvApi.getEntityMetadata(table.id, false, [
+      "DisplayName",
+      "DisplayCollectionName",
+      "Description",
+      "SchemaName",
+      "LogicalName",
+      "ObjectTypeCode",
+    ]);
+    const displayNameLabels = ((entityMeta as any)?.DisplayName?.LocalizedLabels as any[]) || [];
+    table.langProps.push({
+      name: "DisplayName",
+      translation: [...displayNameLabels.map((label: any) => new LangTranslation(label.LanguageCode, label.Label))],
     });
+
+    const displayCollectionLabels = ((entityMeta as any)?.DisplayCollectionName?.LocalizedLabels as any[]) || [];
+    table.langProps.push({
+      name: "DisplayCollectionName",
+      translation: [
+        ...displayCollectionLabels.map((label: any) => new LangTranslation(label.LanguageCode, label.Label)),
+      ],
+    });
+
+    table.langProps.push({
+      name: "Description",
+      translation: [
+        ...((entityMeta as any)?.Description?.LocalizedLabels || []).map(
+          (label: any) => new LangTranslation(label.LanguageCode, label.Label),
+        ),
+      ],
+    });
+    return true;
   }
 
   async getTableFields(table: Table): Promise<boolean> {
-    return new Promise<boolean>(async (resolve, reject) => {
-      try {
-        if (table.fields.length > 0) {
-          resolve(true);
-          return;
-        }
-        const entityMeta = await this.dvApi.getEntityRelatedMetadata(table.logicalName, "Attributes", [
-          "DisplayName",
-          "Description",
-          "LogicalName",
-        ]);
-        entityMeta.value.forEach((fld: any) => {
-          table.fields.push({
-            id: fld.MetadataId,
-            name: fld.LogicalName,
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
+
+    if (table.fields.length > 0) {
+      return true;
+    }
+
+    const entityMeta = await this.dvApi.getEntityRelatedMetadata(table.logicalName, "Attributes", [
+      "DisplayName",
+      "Description",
+      "LogicalName",
+    ]);
+    entityMeta.value.forEach((fld: any) => {
+      table.fields.push({
+        id: fld.MetadataId,
+        name: fld.LogicalName,
+        langProps: [
+          {
+            name: "DisplayName",
+            translation: [
+              ...((fld as any)?.DisplayName?.LocalizedLabels as any[]).map(
+                (label: any) => new LangTranslation(label.LanguageCode, label.Label),
+              ),
+            ],
+          },
+          {
+            name: "Description",
+            translation: [
+              ...((fld as any)?.Description?.LocalizedLabels as any[]).map(
+                (label: any) => new LangTranslation(label.LanguageCode, label.Label),
+              ),
+            ],
+          },
+        ],
+      });
+    });
+    return true;
+  }
+
+  async getRelationships(table: Table): Promise<boolean> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
+
+    if (table.relationships.length > 0) {
+      return true;
+    }
+
+    const relList = ["OneToManyRelationships", "ManyToOneRelationships"];
+
+    for (const relType of relList) {
+      const entityMeta = await this.dvApi.getEntityRelatedMetadata(
+        table.logicalName,
+        relType as unknown as DataverseAPI.EntityRelatedMetadataPath,
+        ["AssociatedMenuConfiguration", "ReferencedEntity", "SchemaName", "ReferencingEntity"],
+      );
+      const relMeta = entityMeta as { value?: any[] };
+
+      (relMeta.value ?? [])
+        .filter(
+          (rel: any) =>
+            rel?.AssociatedMenuConfiguration?.Behavior == "UseLabel" &&
+            !table.relationships.some((r) => r.id === rel?.MetadataId),
+        )
+        .forEach((rel: any) => {
+          table.relationships.push({
+            id: rel.MetadataId,
+            name: rel.LogicalName,
+            type: relType,
+            props: {
+              SchemaName: rel.SchemaName,
+              ReferencingEntity: rel.ReferencingEntity,
+            },
             langProps: [
               {
                 name: "DisplayName",
                 translation: [
-                  ...((fld as any)?.DisplayName?.LocalizedLabels as any[]).map(
-                    (label: any) => new LangTranslation(label.LanguageCode, label.Label),
-                  ),
-                ],
-              },
-              {
-                name: "Description",
-                translation: [
-                  ...((fld as any)?.Description?.LocalizedLabels as any[]).map(
+                  ...((rel as any)?.AssociatedMenuConfiguration?.Label?.LocalizedLabels as any[]).map(
                     (label: any) => new LangTranslation(label.LanguageCode, label.Label),
                   ),
                 ],
@@ -264,444 +334,377 @@ export class dvService {
             ],
           });
         });
-        resolve(true);
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
+    }
+    this.onLog("O2M and M2O Relationships loaded");
 
-  async getRelationships(table: Table): Promise<boolean> {
-    return new Promise<boolean>(async (resolve, reject) => {
-      try {
-        if (table.relationships.length > 0) {
-          resolve(true);
-          return;
-        }
+    const entityMeta = await this.dvApi.getEntityRelatedMetadata(table.logicalName, "ManyToManyRelationships", [
+      "Entity1AssociatedMenuConfiguration",
+      "Entity2AssociatedMenuConfiguration",
+      "IntersectEntityName",
+      "SchemaName",
+      "Entity1LogicalName",
+      "Entity2LogicalName",
+    ]);
 
-        const relList = ["OneToManyRelationships", "ManyToOneRelationships"];
+    const relMeta = entityMeta as { value?: any[] };
+    (relMeta.value ?? [])
+      .filter(
+        (rel: any) =>
+          rel?.Entity1AssociatedMenuConfiguration?.Behavior == "UseLabel" ||
+          rel?.Entity2AssociatedMenuConfiguration?.Behavior == "UseLabel",
+      )
+      .forEach((rel: any) => {
+        const amc =
+          rel.Entity1LogicalName == table.logicalName
+            ? rel.Entity1AssociatedMenuConfiguration
+            : rel.Entity2AssociatedMenuConfiguration;
 
-        for await (const relType of relList) {
-          const entityMeta = await this.dvApi.getEntityRelatedMetadata(
-            table.logicalName,
-            relType as unknown as DataverseAPI.EntityRelatedMetadataPath,
-            ["AssociatedMenuConfiguration", "ReferencedEntity", "SchemaName", "ReferencingEntity"],
-          );
-          const relMeta = entityMeta as { value?: any[] };
-
-          (relMeta.value ?? [])
-            .filter(
-              (rel: any) =>
-                rel?.AssociatedMenuConfiguration?.Behavior == "UseLabel" &&
-                !table.relationships.some((r) => r.id === rel?.MetadataId),
-            )
-            .forEach((rel: any) => {
-              table.relationships.push({
-                id: rel.MetadataId,
-                name: rel.LogicalName,
-                type: relType,
-                props: {
-                  SchemaName: rel.SchemaName,
-                  ReferencingEntity: rel.ReferencingEntity,
-                },
-                langProps: [
-                  {
-                    name: "DisplayName",
-                    translation: [
-                      ...((rel as any)?.AssociatedMenuConfiguration?.Label?.LocalizedLabels as any[]).map(
-                        (label: any) => new LangTranslation(label.LanguageCode, label.Label),
-                      ),
-                    ],
-                  },
-                ],
-              });
-            });
-        }
-        this.onLog("O2M and M2O Relationships loaded");
-
-        const entityMeta = await this.dvApi.getEntityRelatedMetadata(table.logicalName, "ManyToManyRelationships", [
-          "Entity1AssociatedMenuConfiguration",
-          "Entity2AssociatedMenuConfiguration",
-          "IntersectEntityName",
-          "SchemaName",
-          "Entity1LogicalName",
-          "Entity2LogicalName",
-        ]);
-
-        const relMeta = entityMeta as { value?: any[] };
-        (relMeta.value ?? [])
-          .filter(
-            (rel: any) =>
-              rel?.Entity1AssociatedMenuConfiguration?.Behavior == "UseLabel" ||
-              rel?.Entity2AssociatedMenuConfiguration?.Behavior == "UseLabel",
-          )
-          .forEach((rel: any) => {
-            const amc =
-              rel.Entity1LogicalName == table.logicalName
-                ? rel.Entity1AssociatedMenuConfiguration
-                : rel.Entity2AssociatedMenuConfiguration;
-
-            table.relationships.push({
-              id: rel.MetadataId,
-              name: rel.SchemaName,
-              type: "ManyToManyRelationship",
-              props: {
-                IntersectEntityName: rel.IntersectEntityName,
-              },
-              langProps: [
-                {
-                  name: "DisplayName",
-                  translation: [
-                    ...((amc as any)?.Label?.LocalizedLabels as any[]).map(
-                      (label: any) => new LangTranslation(label.LanguageCode, label.Label),
-                    ),
-                  ],
-                },
+        table.relationships.push({
+          id: rel.MetadataId,
+          name: rel.SchemaName,
+          type: "ManyToManyRelationship",
+          props: {
+            IntersectEntityName: rel.IntersectEntityName,
+          },
+          langProps: [
+            {
+              name: "DisplayName",
+              translation: [
+                ...((amc as any)?.Label?.LocalizedLabels as any[]).map(
+                  (label: any) => new LangTranslation(label.LanguageCode, label.Label),
+                ),
               ],
-            });
-          });
-        this.onLog("ManyToMany Relationships loaded");
-        resolve(true);
-      } catch (error) {
-        reject(error);
-      }
-    });
+            },
+          ],
+        });
+      });
+    this.onLog("ManyToMany Relationships loaded");
+    return true;
   }
 
   async getOptionSets(table: Table): Promise<boolean> {
-    return new Promise<boolean>(async (resolve, reject) => {
-      try {
-        if (table.optionSets.length > 0) resolve(true);
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
 
-        const em = await this.dvApi.queryData(
-          `EntityDefinitions(LogicalName='${table.logicalName}')/Attributes/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName,AttributeType&$expand=OptionSet,GlobalOptionSet`,
-        );
+    if (table.optionSets.length > 0) {
+      return true;
+    }
 
-        em.value.forEach((attr: any) => {
-          const optionSet = attr.OptionSet;
-          if (optionSet && optionSet.Options) {
-            optionSet.Options.forEach((option: any) => {
-              const labelLangProps = {
-                name: "Label",
-                translation:
-                  option.Label?.LocalizedLabels?.map(
-                    (label: any) => new LangTranslation(label.LanguageCode, label.Label),
-                  ) || [],
-              };
+    const em = await this.dvApi.queryData(
+      `EntityDefinitions(LogicalName='${table.logicalName}')/Attributes/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName,AttributeType&$expand=OptionSet,GlobalOptionSet`,
+    );
 
-              const descLangProps = {
-                name: "Description",
-                translation:
-                  option.Description?.LocalizedLabels?.map(
-                    (label: any) => new LangTranslation(label.LanguageCode, label.Label),
-                  ) || [],
-              };
+    em.value.forEach((attr: any) => {
+      const optionSet = attr.OptionSet;
+      if (optionSet && optionSet.Options) {
+        optionSet.Options.forEach((option: any) => {
+          const labelLangProps = {
+            name: "Label",
+            translation:
+              option.Label?.LocalizedLabels?.map(
+                (label: any) => new LangTranslation(label.LanguageCode, label.Label),
+              ) || [],
+          };
 
-              // Create separate entries for Label and Description
-              const optionDefLabel = new OptionSetDef(
-                attr.MetadataId,
-                attr.LogicalName,
-                [labelLangProps, descLangProps],
-                false,
-              );
-              optionDefLabel.attributeLogicalName = attr.LogicalName;
+          const descLangProps = {
+            name: "Description",
+            translation:
+              option.Description?.LocalizedLabels?.map(
+                (label: any) => new LangTranslation(label.LanguageCode, label.Label),
+              ) || [],
+          };
 
-              optionDefLabel.optionValue = option.Value;
-              optionDefLabel.type = attr.AttributeType;
-              optionDefLabel.isGlobal = optionSet.IsGlobal;
-              table.optionSets.push(optionDefLabel);
-            });
-          }
+          // Create separate entries for Label and Description
+          const optionDefLabel = new OptionSetDef(
+            attr.MetadataId,
+            attr.LogicalName,
+            [labelLangProps, descLangProps],
+            false,
+          );
+          optionDefLabel.attributeLogicalName = attr.LogicalName;
+
+          optionDefLabel.optionValue = option.Value;
+          optionDefLabel.type = attr.AttributeType;
+          optionDefLabel.isGlobal = optionSet.IsGlobal;
+          table.optionSets.push(optionDefLabel);
         });
-        this.onLog(`Loaded ${table.optionSets.length} optionset entries for ${table.logicalName}`);
-        resolve(true);
-      } catch (error) {
-        this.onLog(`Error loading optionsets: ${(error as Error).message}`, "error");
-        reject(error);
       }
     });
+    this.onLog(`Loaded ${table.optionSets.length} optionset entries for ${table.logicalName}`);
+    return true;
   }
 
   async getBooleans(table: Table): Promise<boolean> {
-    return new Promise<boolean>(async (resolve, reject) => {
-      try {
-        if (table.optionSets.filter((os) => os.type === "Boolean").length > 0) {
-          resolve(true);
-          return;
-        }
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
 
-        const em = await this.dvApi.queryData(
-          `EntityDefinitions(LogicalName='${table.logicalName}')/Attributes/Microsoft.Dynamics.CRM.BooleanAttributeMetadata?$select=LogicalName,AttributeType&$expand=OptionSet,GlobalOptionSet`,
+    if (table.optionSets.filter((os) => os.type === "Boolean").length > 0) {
+      return true;
+    }
+
+    const em = await this.dvApi.queryData(
+      `EntityDefinitions(LogicalName='${table.logicalName}')/Attributes/Microsoft.Dynamics.CRM.BooleanAttributeMetadata?$select=LogicalName,AttributeType&$expand=OptionSet,GlobalOptionSet`,
+    );
+    em.value.forEach((attr: any) => {
+      const optionSet = attr.OptionSet;
+      if (optionSet && optionSet.TrueOption) {
+        const trueOption = optionSet.TrueOption;
+
+        const labelLangProps = {
+          name: "Label",
+          translation:
+            trueOption.Label?.LocalizedLabels?.map(
+              (label: any) => new LangTranslation(label.LanguageCode, label.Label),
+            ) || [],
+        };
+
+        const descLangProps = {
+          name: "Description",
+          translation:
+            trueOption.Description?.LocalizedLabels?.map(
+              (label: any) => new LangTranslation(label.LanguageCode, label.Label),
+            ) || [],
+        };
+
+        // Create separate entries for Label and Description
+        const optionDefLabel = new OptionSetDef(
+          attr.MetadataId,
+          attr.LogicalName,
+          [labelLangProps, descLangProps],
+          false,
         );
-        em.value.forEach((attr: any) => {
-          const optionSet = attr.OptionSet;
-          if (optionSet && optionSet.TrueOption) {
-            const trueOption = optionSet.TrueOption;
+        optionDefLabel.attributeLogicalName = attr.LogicalName;
+        optionDefLabel.optionValue = trueOption.Value;
+        optionDefLabel.type = attr.AttributeType;
+        optionDefLabel.isGlobal = optionSet.IsGlobal;
+        table.optionSets.push(optionDefLabel);
+      }
+      if (optionSet && optionSet.FalseOption) {
+        const falseOption = optionSet.FalseOption;
 
-            const labelLangProps = {
-              name: "Label",
-              translation:
-                trueOption.Label?.LocalizedLabels?.map(
-                  (label: any) => new LangTranslation(label.LanguageCode, label.Label),
-                ) || [],
-            };
+        const labelLangProps = {
+          name: "Label",
+          translation:
+            falseOption.Label?.LocalizedLabels?.map(
+              (label: any) => new LangTranslation(label.LanguageCode, label.Label),
+            ) || [],
+        };
 
-            const descLangProps = {
-              name: "Description",
-              translation:
-                trueOption.Description?.LocalizedLabels?.map(
-                  (label: any) => new LangTranslation(label.LanguageCode, label.Label),
-                ) || [],
-            };
+        const descLangProps = {
+          name: "Description",
+          translation:
+            falseOption.Description?.LocalizedLabels?.map(
+              (label: any) => new LangTranslation(label.LanguageCode, label.Label),
+            ) || [],
+        };
 
-            // Create separate entries for Label and Description
-            const optionDefLabel = new OptionSetDef(
-              attr.MetadataId,
-              attr.LogicalName,
-              [labelLangProps, descLangProps],
-              false,
-            );
-            optionDefLabel.attributeLogicalName = attr.LogicalName;
-            optionDefLabel.optionValue = trueOption.Value;
-            optionDefLabel.type = attr.AttributeType;
-            optionDefLabel.isGlobal = optionSet.IsGlobal;
-            table.optionSets.push(optionDefLabel);
-          }
-          if (optionSet && optionSet.FalseOption) {
-            const falseOption = optionSet.FalseOption;
-
-            const labelLangProps = {
-              name: "Label",
-              translation:
-                falseOption.Label?.LocalizedLabels?.map(
-                  (label: any) => new LangTranslation(label.LanguageCode, label.Label),
-                ) || [],
-            };
-
-            const descLangProps = {
-              name: "Description",
-              translation:
-                falseOption.Description?.LocalizedLabels?.map(
-                  (label: any) => new LangTranslation(label.LanguageCode, label.Label),
-                ) || [],
-            };
-
-            // Create separate entries for Label and Description
-            const optionDefLabel = new OptionSetDef(
-              attr.MetadataId,
-              attr.LogicalName,
-              [labelLangProps, descLangProps],
-              false,
-            );
-            optionDefLabel.attributeLogicalName = attr.LogicalName;
-            optionDefLabel.optionValue = falseOption.Value;
-            optionDefLabel.type = attr.AttributeType;
-            optionDefLabel.isGlobal = optionSet.IsGlobal;
-            table.optionSets.push(optionDefLabel);
-          }
-        });
-
-        this.onLog(`Loaded  ${table.optionSets.length} optionset entries for ${table.logicalName}`);
-        resolve(true);
-      } catch (error) {
-        this.onLog(`Error loading optionsets: ${(error as Error).message}`, "error");
-        reject(error);
+        // Create separate entries for Label and Description
+        const optionDefLabel = new OptionSetDef(
+          attr.MetadataId,
+          attr.LogicalName,
+          [labelLangProps, descLangProps],
+          false,
+        );
+        optionDefLabel.attributeLogicalName = attr.LogicalName;
+        optionDefLabel.optionValue = falseOption.Value;
+        optionDefLabel.type = attr.AttributeType;
+        optionDefLabel.isGlobal = optionSet.IsGlobal;
+        table.optionSets.push(optionDefLabel);
       }
     });
+
+    this.onLog(`Loaded  ${table.optionSets.length} optionset entries for ${table.logicalName}`);
+    return true;
   }
 
   async getViews(table: Table): Promise<boolean> {
-    return new Promise<boolean>(async (resolve, reject) => {
-      try {
-        var fetchXml = [
-          "<fetch>",
-          "  <entity name='savedquery'>",
-          "    <attribute name='savedqueryid'/>",
-          "    <attribute name='name'/>",
-          "    <attribute name='querytype'/>",
-          "    <filter>",
-          "      <condition attribute='returnedtypecode' operator='eq' value='",
-          table.code,
-          "'/>",
-          "    </filter>",
-          "  </entity>",
-          "</fetch>",
-        ].join("");
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
 
-        const viewsData = await this.dvApi.fetchXmlQuery(fetchXml);
+    const fetchXml = [
+      "<fetch>",
+      "  <entity name='savedquery'>",
+      "    <attribute name='savedqueryid'/>",
+      "    <attribute name='name'/>",
+      "    <attribute name='querytype'/>",
+      "    <filter>",
+      "      <condition attribute='returnedtypecode' operator='eq' value='",
+      table.code,
+      "'/>",
+      "    </filter>",
+      "  </entity>",
+      "</fetch>",
+    ].join("");
 
-        await Promise.all(
-          (viewsData.value as any[]).map(async (view: any) => {
-            return new Promise<void>(async (resolve) => {
-              const label = await this.getLocLabels("savedqueries", view.savedqueryid, "name");
-              const decription = await this.getLocLabels("savedqueries", view.savedqueryid, "description");
-              const queryTypeMap: Record<number, string> = {
-                0: "Public View",
-                2: "Associated View",
-                1: "Advanced Search View",
-                4: "Quick Find Search View",
-                64: "Lookup view",
-                2048: "Saved query used for workflow templates and email templates",
-                8192: "Outlook offine template",
-              };
-              table.views.push({
-                id: view.savedqueryid,
-                name: view.name,
-                type: queryTypeMap[view.querytype] || String(view.querytype),
-                langProps: [
-                  { name: "Label", translation: label },
-                  { name: "Description", translation: decription },
-                ],
-              });
-              resolve();
-            });
-          }),
-        );
-        resolve(true);
-      } catch (error) {
-        reject(error);
-      }
-    });
+    const viewsData = await this.dvApi.fetchXmlQuery(fetchXml);
+    const queryTypeMap: Record<number, string> = {
+      0: "Public View",
+      2: "Associated View",
+      1: "Advanced Search View",
+      4: "Quick Find Search View",
+      64: "Lookup view",
+      2048: "Saved query used for workflow templates and email templates",
+      8192: "Outlook offine template",
+    };
+
+    await Promise.all(
+      (viewsData.value as any[]).map(async (view: any) => {
+        const label = await this.getLocLabels("savedqueries", view.savedqueryid, "name");
+        const description = await this.getLocLabels("savedqueries", view.savedqueryid, "description");
+        table.views.push({
+          id: view.savedqueryid,
+          name: view.name,
+          type: queryTypeMap[view.querytype] || String(view.querytype),
+          langProps: [
+            { name: "Label", translation: label },
+            { name: "Description", translation: description },
+          ],
+        });
+      }),
+    );
+    return true;
   }
 
   async getCharts(table: Table): Promise<boolean> {
-    return new Promise<boolean>(async (resolve, reject) => {
-      try {
-        var fetchXml = [
-          "<fetch>",
-          "  <entity name='savedqueryvisualization'>",
-          "    <attribute name='savedqueryvisualizationid'/>",
-          "    <attribute name='name'/>",
-          "    <filter>",
-          "      <condition attribute='primaryentitytypecode' operator='eq' value='",
-          table.code,
-          "'/>",
-          "    </filter>",
-          "  </entity>",
-          "</fetch>",
-        ].join("");
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
 
-        const chartsData = await this.dvApi.fetchXmlQuery(fetchXml);
-        await Promise.all(
-          (chartsData.value as any[]).map(async (chart: any) => {
-            return new Promise<void>(async (resolve) => {
-              const label = await this.getLocLabels(
-                "savedqueryvisualizations",
-                chart.savedqueryvisualizationid,
-                "name",
-              );
-              const decription = await this.getLocLabels(
-                "savedqueryvisualizations",
-                chart.savedqueryvisualizationid,
-                "description",
-              );
-              table.charts.push({
-                id: chart.savedqueryvisualizationid,
-                name: chart.name,
-                langProps: [
-                  { name: "Label", translation: label },
-                  { name: "Description", translation: decription },
-                ],
-              });
-              resolve();
-            });
-          }),
+    const fetchXml = [
+      "<fetch>",
+      "  <entity name='savedqueryvisualization'>",
+      "    <attribute name='savedqueryvisualizationid'/>",
+      "    <attribute name='name'/>",
+      "    <filter>",
+      "      <condition attribute='primaryentitytypecode' operator='eq' value='",
+      table.code,
+      "'/>",
+      "    </filter>",
+      "  </entity>",
+      "</fetch>",
+    ].join("");
+
+    const chartsData = await this.dvApi.fetchXmlQuery(fetchXml);
+    await Promise.all(
+      (chartsData.value as any[]).map(async (chart: any) => {
+        const label = await this.getLocLabels("savedqueryvisualizations", chart.savedqueryvisualizationid, "name");
+        const description = await this.getLocLabels(
+          "savedqueryvisualizations",
+          chart.savedqueryvisualizationid,
+          "description",
         );
-        resolve(true);
-      } catch (error) {
-        reject(error);
-      }
-    });
+        table.charts.push({
+          id: chart.savedqueryvisualizationid,
+          name: chart.name,
+          langProps: [
+            { name: "Label", translation: label },
+            { name: "Description", translation: description },
+          ],
+        });
+      }),
+    );
+    return true;
   }
 
   async getForms(table: Table, lang: LanguageDef, base: boolean): Promise<boolean> {
-    return new Promise<boolean>(async (resolve, reject) => {
-      try {
-        var fetchXml = [
-          "<fetch>",
-          "  <entity name='systemform'>",
-          "    <attribute name='formid'/>",
-          "    <attribute name='name'/>",
-          "    <attribute name='formxml'/>",
-          "   <attribute name='type'/>",
-          "    <attribute name='formidunique'/>",
-          "    <filter>",
-          "      <condition attribute='objecttypecode' operator='eq' value='",
-          table.code,
-          "'/>",
-          "    </filter>",
-          "  </entity>",
-          "</fetch>",
-        ].join("");
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
 
-        const formsData = await this.dvApi.fetchXmlQuery(fetchXml);
+    const fetchXml = [
+      "<fetch>",
+      "  <entity name='systemform'>",
+      "    <attribute name='formid'/>",
+      "    <attribute name='name'/>",
+      "    <attribute name='formxml'/>",
+      "   <attribute name='type'/>",
+      "    <attribute name='formidunique'/>",
+      "    <filter>",
+      "      <condition attribute='objecttypecode' operator='eq' value='",
+      table.code,
+      "'/>",
+      "    </filter>",
+      "  </entity>",
+      "</fetch>",
+    ].join("");
 
-        await Promise.all(
-          (formsData.value as any[]).map(async (form: any) => {
-            return new Promise<void>(async (resolve) => {
-              const label = await this.getLocLabels("systemforms", form.formid, "name");
-              const decription = await this.getLocLabels("systemforms", form.formid, "description");
-              const formTypeMap: Record<number, string> = {
-                6: "Quick View Form",
-                2: "Main",
-                7: "Quick Create Form",
-              };
-              table.forms.push({
-                id: form.formid,
-                name: form.name,
-                type: formTypeMap[form.type] || String(form.type),
-                props: { formXml: form.formxml, uniqueName: form.formidunique, lang: lang.code, base: base },
-                langProps: [
-                  { name: "Label", translation: label },
-                  { name: "Description", translation: decription },
-                ],
-              });
-              resolve();
-            });
-          }),
-        );
-        resolve(true);
-      } catch (error) {
-        reject(error);
-      }
-    });
+    const formsData = await this.dvApi.fetchXmlQuery(fetchXml);
+    const formTypeMap: Record<number, string> = {
+      6: "Quick View Form",
+      2: "Main",
+      7: "Quick Create Form",
+    };
+
+    await Promise.all(
+      (formsData.value as any[]).map(async (form: any) => {
+        const label = await this.getLocLabels("systemforms", form.formid, "name");
+        const description = await this.getLocLabels("systemforms", form.formid, "description");
+        table.forms.push({
+          id: form.formid,
+          name: form.name,
+          type: formTypeMap[form.type] || String(form.type),
+          props: { formXml: form.formxml, uniqueName: form.formidunique, lang: lang.code, base: base },
+          langProps: [
+            { name: "Label", translation: label },
+            { name: "Description", translation: description },
+          ],
+        });
+      }),
+    );
+    return true;
   }
 
   async getLocLabels(tableClassName: string, objectId: string, attributeName: string): Promise<LangTranslation[]> {
-    return new Promise<LangTranslation[]>(async (resolve, reject) => {
-      try {
-        const odata = `RetrieveLocLabels(EntityMoniker=@p1,AttributeName=@p2,IncludeUnpublished=false)?@p1={'@odata.id':'${tableClassName}(${objectId})'}&@p2='${attributeName}'`;
-        const result = await this.dvApi.queryData(odata);
-        const returnTranslations: LangTranslation[] = [];
-        (((result as any).Label?.LocalizedLabels as any[]) || []).forEach((label: any) => {
-          returnTranslations.push(new LangTranslation(label.LanguageCode, label.Label));
-        });
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
 
-        resolve(returnTranslations); // Map the result to LangTranslation objects as needed
-      } catch (error) {
-        reject(error);
-      }
+    const odata = `RetrieveLocLabels(EntityMoniker=@p1,AttributeName=@p2,IncludeUnpublished=false)?@p1={'@odata.id':'${tableClassName}(${objectId})'}&@p2='${attributeName}'`;
+    const result = await this.dvApi.queryData(odata);
+    const returnTranslations: LangTranslation[] = [];
+    (((result as any).Label?.LocalizedLabels as any[]) || []).forEach((label: any) => {
+      returnTranslations.push(new LangTranslation(label.LanguageCode, label.Label));
     });
+
+    return returnTranslations;
   }
 
   async updateLanguage(lang: string, userId: string): Promise<void> {
-    return new Promise<void>(async (resolve, reject) => {
-      try {
-        await this.dvApi.update("usersettingscollection", userId, {
-          uilanguageid: lang,
-          localeid: lang,
-        });
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
 
-        await new Promise((r) => setTimeout(r, 2000));
-        resolve();
-      } catch (error) {
-        this.onLog("Failed to update language: " + (error as Error).message, "error");
-        reject(error);
-      }
+    await this.dvApi.update("usersettingscollection", userId, {
+      uilanguageid: lang,
+      localeid: lang,
     });
+
+    await new Promise((r) => setTimeout(r, 2000));
   }
 
   async getUserLanguage(): Promise<{ uiLocale: string; locale: string; userid: string }> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     try {
       const user = await this.dvApi.execute({
         operationName: "WhoAmI",
@@ -722,162 +725,159 @@ export class dvService {
   }
 
   async getSiteMaps(solutionId: string): Promise<SecInfo[]> {
-    return new Promise<SecInfo[]>(async (resolve, reject) => {
-      try {
-        let siteMaps: SecInfo[] = [];
-        if (solutionId !== "") {
-          const fetchXml = [
-            "<fetch>",
-            "  <entity name='solutioncomponent'>",
-            "    <attribute name='objectid'/>",
-            "    <filter>",
-            "      <condition attribute='solutionid' operator='eq' value='",
-            solutionId,
-            "' uitype='solution'/>",
-            "      <filter>",
-            "        <condition attribute='componenttype' operator='eq' value='62'/>",
-            "      </filter>",
-            "    </filter>",
-            "  </entity>",
-            "</fetch>",
-          ].join("");
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
 
-          const data = await this.dvApi.fetchXmlQuery(fetchXml);
-          if (!data.value || (data.value as any[]).length === 0) {
-            this.onLog("No site maps found for the selected solution.", "warning");
-            resolve([]);
-            return;
-          }
-          const siteMapXml = [
-            "<fetch>",
-            "  <entity name='sitemap'>",
-            "    <attribute name='sitemapxml'/>",
-            "    <attribute name='sitemapnameunique'/>",
-            "    <attribute name='sitemapname'/>",
-            "    <filter>",
-            "      <condition attribute='sitemapid' operator='in'>",
-            data.value.map((sm) => `<value>${sm.objectid}</value>`).join(""),
-            "      </condition>",
-            "    </filter>",
-            "  </entity>",
-            "</fetch>",
-          ].join("");
-          const siteMapData = await this.dvApi.fetchXmlQuery(siteMapXml);
-          siteMaps = (siteMapData.value as any[]).map((sm: any) => {
-            return {
-              id: sm.sitemapid,
-              name: sm.sitemapname,
-              langProps: [],
-              props: { sitemapXml: sm.sitemapxml, uniqueName: sm.sitemapnameunique },
-            } as SecInfo;
-          });
-        } else {
-          const url =
-            "sitemaps/Microsoft.Dynamics.CRM.RetrieveUnpublishedMultiple()?$select=sitemapxml,sitemapnameunique,sitemapname";
-          const data = await this.dvApi.queryData(url);
-          siteMaps = (data.value as any[]).map((sm: any) => {
-            return {
-              id: sm.SitemapId,
-              name: sm.SitemapName,
-              langProps: [],
-              props: { sitemapXml: sm.SitemapXml, uniqueName: sm.SitemapNameUnique },
-            } as SecInfo;
-          });
-        }
-        if (siteMaps.length === 0) {
-          this.onLog("No site maps found for the selected solution.", "warning");
-          resolve([]);
-          return;
-        }
-        this.onLog(`Fetched ${siteMaps.length} site maps for solution: ${solutionId}`, "success");
-        resolve(siteMaps);
-      } catch (error) {
-        reject(error);
+    let siteMaps: SecInfo[] = [];
+    if (solutionId !== "") {
+      const fetchXml = [
+        "<fetch>",
+        "  <entity name='solutioncomponent'>",
+        "    <attribute name='objectid'/>",
+        "    <filter>",
+        "      <condition attribute='solutionid' operator='eq' value='",
+        solutionId,
+        "' uitype='solution'/>",
+        "      <filter>",
+        "        <condition attribute='componenttype' operator='eq' value='62'/>",
+        "      </filter>",
+        "    </filter>",
+        "  </entity>",
+        "</fetch>",
+      ].join("");
+
+      const data = await this.dvApi.fetchXmlQuery(fetchXml);
+      if (!data.value || (data.value as any[]).length === 0) {
+        this.onLog("No site maps found for the selected solution.", "warning");
+        return [];
       }
-    });
+      const siteMapXml = [
+        "<fetch>",
+        "  <entity name='sitemap'>",
+        "    <attribute name='sitemapxml'/>",
+        "    <attribute name='sitemapnameunique'/>",
+        "    <attribute name='sitemapname'/>",
+        "    <filter>",
+        "      <condition attribute='sitemapid' operator='in'>",
+        data.value.map((sm) => `<value>${sm.objectid}</value>`).join(""),
+        "      </condition>",
+        "    </filter>",
+        "  </entity>",
+        "</fetch>",
+      ].join("");
+      const siteMapData = await this.dvApi.fetchXmlQuery(siteMapXml);
+      siteMaps = (siteMapData.value as any[]).map((sm: any) => {
+        return {
+          id: sm.sitemapid,
+          name: sm.sitemapname,
+          langProps: [],
+          props: { sitemapXml: sm.sitemapxml, uniqueName: sm.sitemapnameunique },
+        } as SecInfo;
+      });
+    } else {
+      const url =
+        "sitemaps/Microsoft.Dynamics.CRM.RetrieveUnpublishedMultiple()?$select=sitemapxml,sitemapnameunique,sitemapname";
+      const data = await this.dvApi.queryData(url);
+      siteMaps = (data.value as any[]).map((sm: any) => {
+        return {
+          id: sm.SitemapId,
+          name: sm.SitemapName,
+          langProps: [],
+          props: { sitemapXml: sm.SitemapXml, uniqueName: sm.SitemapNameUnique },
+        } as SecInfo;
+      });
+    }
+    if (siteMaps.length === 0) {
+      this.onLog("No site maps found for the selected solution.", "warning");
+      return [];
+    }
+    this.onLog(`Fetched ${siteMaps.length} site maps for solution: ${solutionId}`, "success");
+    return siteMaps;
   }
 
   async getDashboards(solutionId: string): Promise<SecInfo[]> {
-    return new Promise<SecInfo[]>(async (resolve, reject) => {
-      let dashboards: SecInfo[] = [];
-      try {
-        if (solutionId !== "") {
-          const fetchXml = [
-            "<fetch>",
-            "  <entity name='solutioncomponent'>",
-            "    <attribute name='objectid'/>",
-            "    <filter>",
-            "      <condition attribute='solutionid' operator='eq' value='",
-            solutionId,
-            "' uitype='solution'/>",
-            "      <filter>",
-            "        <condition attribute='componenttype' operator='eq' value='60'/>",
-            "      </filter>",
-            "    </filter>",
-            "  </entity>",
-            "</fetch>",
-          ].join("");
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
 
-          const data = await this.dvApi.fetchXmlQuery(fetchXml);
-          if (!data.value || (data.value as any[]).length === 0) {
-            this.onLog("No dashboards found for the selected solution.", "warning");
-            resolve([]);
-            return;
-          }
-          const dashboardsXml = [
-            "<fetch>",
-            "  <entity name='systemform'>",
-            "    <attribute name='formxml'/>",
-            "    <attribute name='name'/>",
-            "    <attribute name='formidunique'/>",
-            "    <attribute name='formid'/>",
-            "    <filter>",
-            "      <condition attribute='formid' operator='in'>",
-            data.value.map((db) => `<value>${db.objectid}</value>`).join(""),
-            "      </condition>",
-            "      <condition attribute='type' operator='eq' value='0'/>",
-            "    </filter>",
-            "  </entity>",
-            "</fetch>",
-          ].join("");
-          const dashboardData = await this.dvApi.fetchXmlQuery(dashboardsXml);
-          dashboards = (dashboardData.value as any[]).map((db: any) => {
-            return {
-              id: db.formid,
-              name: db.name,
-              langProps: [],
-              props: { formXml: db.formxml, uniqueName: db.formidunique, formId: db.formid },
-            } as SecInfo;
-          });
-        } else {
-          const dashboardsXml = [
-            "<fetch>",
-            "  <entity name='systemform'>",
-            "    <attribute name='formid'/>",
-            "    <attribute name='formidunique'/>",
-            "    <attribute name='formxml'/>",
-            "    <attribute name='name'/>",
-            "    <filter>",
-            "      <condition attribute='type' operator='eq' value='0'/>",
-            "    </filter>",
-            "  </entity>",
-            "</fetch>",
-          ].join("");
-          const dashboardData = await this.dvApi.fetchXmlQuery(dashboardsXml);
-          dashboards = (dashboardData.value as any[]).map((db: any) => {
-            return {
-              id: db.formid,
-              name: db.name,
-              langProps: [],
-              props: { formXml: db.formxml, uniqueName: db.formidunique, formId: db.formid },
-            } as SecInfo;
-          });
-        }
-        resolve(dashboards);
-      } catch (error) {
-        reject(error);
+    let dashboards: SecInfo[] = [];
+    if (solutionId !== "") {
+      const fetchXml = [
+        "<fetch>",
+        "  <entity name='solutioncomponent'>",
+        "    <attribute name='objectid'/>",
+        "    <filter>",
+        "      <condition attribute='solutionid' operator='eq' value='",
+        solutionId,
+        "' uitype='solution'/>",
+        "      <filter>",
+        "        <condition attribute='componenttype' operator='eq' value='60'/>",
+        "      </filter>",
+        "    </filter>",
+        "  </entity>",
+        "</fetch>",
+      ].join("");
+
+      const data = await this.dvApi.fetchXmlQuery(fetchXml);
+      if (!data.value || (data.value as any[]).length === 0) {
+        this.onLog("No dashboards found for the selected solution.", "warning");
+        return [];
       }
-    });
+      const dashboardsXml = [
+        "<fetch>",
+        "  <entity name='systemform'>",
+        "    <attribute name='formxml'/>",
+        "    <attribute name='name'/>",
+        "    <attribute name='formidunique'/>",
+        "    <attribute name='formid'/>",
+        "    <filter>",
+        "      <condition attribute='formid' operator='in'>",
+        data.value.map((db) => `<value>${db.objectid}</value>`).join(""),
+        "      </condition>",
+        "      <condition attribute='type' operator='eq' value='0'/>",
+        "    </filter>",
+        "  </entity>",
+        "</fetch>",
+      ].join("");
+      const dashboardData = await this.dvApi.fetchXmlQuery(dashboardsXml);
+      dashboards = (dashboardData.value as any[]).map((db: any) => {
+        return {
+          id: db.formid,
+          name: db.name,
+          langProps: [],
+          props: { formXml: db.formxml, uniqueName: db.formidunique, formId: db.formid },
+        } as SecInfo;
+      });
+    } else {
+      const dashboardsXml = [
+        "<fetch>",
+        "  <entity name='systemform'>",
+        "    <attribute name='formid'/>",
+        "    <attribute name='formidunique'/>",
+        "    <attribute name='formxml'/>",
+        "    <attribute name='name'/>",
+        "    <filter>",
+        "      <condition attribute='type' operator='eq' value='0'/>",
+        "    </filter>",
+        "  </entity>",
+        "</fetch>",
+      ].join("");
+      const dashboardData = await this.dvApi.fetchXmlQuery(dashboardsXml);
+      dashboards = (dashboardData.value as any[]).map((db: any) => {
+        return {
+          id: db.formid,
+          name: db.name,
+          langProps: [],
+          props: { formXml: db.formxml, uniqueName: db.formidunique, formId: db.formid },
+        } as SecInfo;
+      });
+    }
+    return dashboards;
   }
 
   /**
@@ -889,6 +889,11 @@ export class dvService {
     displayCollectionName: Record<number, string> | null,
     description: Record<number, string> | null,
   ): Promise<void> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     const body: Record<string, any> = {};
     if (displayName) {
       body.DisplayName = {
@@ -920,7 +925,6 @@ export class dvService {
         })),
       };
     }
-    //body.MergeLabels = true;
     await this.dvApi.updateEntityDefinition(entityLogicalName, body).catch((error) => {
       this.onLog(
         `Failed to update entity metadata for ${entityLogicalName} error: ${(error as Error).message}`,
@@ -938,6 +942,11 @@ export class dvService {
     displayName: Record<number, string> | null,
     description: Record<number, string> | null,
   ): Promise<void> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     const body: Record<string, any> = { LogicalName: attributeLogicalName };
     if (displayName) {
       body.DisplayName = {
@@ -977,6 +986,11 @@ export class dvService {
     attributeName: string,
     labels: Record<number, string>,
   ): Promise<void> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     const locLabels = Object.entries(labels).map(([lcid, label]) => ({
       "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
       Label: label,
@@ -1008,6 +1022,11 @@ export class dvService {
     labels: Record<number, string>,
     isDescription: boolean = false,
   ): Promise<void> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     const locLabels = Object.entries(labels).map(([lcid, label]) => ({
       "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
       Label: label,
@@ -1047,17 +1066,6 @@ export class dvService {
   }
 
   /**
-   * Get localized label from AssociatedMenuConfiguration by language code
-   */
-  private getLabelByLanguageCode(localizedLabels: any[] | undefined, languageCode: number): string | undefined {
-    if (!localizedLabels || !Array.isArray(localizedLabels)) {
-      return undefined;
-    }
-    const label = localizedLabels.find((lbl: any) => lbl.LanguageCode === languageCode);
-    return label?.Label;
-  }
-
-  /**
    * Update relationship metadata
    */
   async updateRelationshipLabel(
@@ -1065,45 +1073,64 @@ export class dvService {
     labels: Record<number, string>,
     relationType: string,
   ): Promise<void> {
-    const locLabels = Object.entries(labels).map(([lcid, label]) => ({
-      "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
-      Label: label,
-      LanguageCode: Number(lcid),
-    }));
-    console.log("Updating relationship label with params:", { schemaName, labels, relationType });
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
+    this.onLog("Updating relationship label", "info");
     const relationship = await this.dvApi.queryData(`RelationshipDefinitions?$filter=SchemaName eq '${schemaName}'`);
 
-    console.log("Fetched relationship metadata for update:", relationship);
+    if (!relationship?.value || !Array.isArray(relationship.value) || relationship.value.length === 0) {
+      const error = `Relationship with SchemaName '${schemaName}' not found`;
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
+
     const relTypeName =
       relationType === "ManyToManyRelationship"
         ? "Microsoft.Dynamics.CRM.ManyToManyRelationshipMetadata"
         : "Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata";
 
-    // Find and replace labels matching language codes in AssociatedMenuConfiguration
-    if (relationship?.value && Array.isArray(relationship.value)) {
-      const rel = relationship.value[0];
-      const amc = rel?.AssociatedMenuConfiguration as any;
-      if (amc?.Label?.LocalizedLabels) {
-        amc.Label.LocalizedLabels.forEach((localizedLabel: any) => {
-          const matchingLabel = this.getLabelByLanguageCode(amc.Label.LocalizedLabels, localizedLabel.LanguageCode);
-          if (matchingLabel) {
-            localizedLabel.Label = matchingLabel;
-          }
-        });
-      }
-      await this.dvApi.updateRelationship(relTypeName, rel).catch((error) => {
-        this.onLog(
-          `Failed to update relationship metadata for ${schemaName} error: ${(error as Error).message}`,
-          "warning",
-        );
+    const rel = relationship.value[0];
+    const amc = rel?.AssociatedMenuConfiguration as any;
+
+    // Update labels with the provided translations
+    if (amc?.Label?.LocalizedLabels) {
+      // Update existing labels or add new ones
+      Object.entries(labels).forEach(([lcid, labelText]) => {
+        const languageCode = Number(lcid);
+        const existingLabel = amc.Label.LocalizedLabels.find((lbl: any) => lbl.LanguageCode === languageCode);
+
+        if (existingLabel) {
+          existingLabel.Label = labelText;
+        } else {
+          amc.Label.LocalizedLabels.push({
+            "@odata.type": "Microsoft.Dynamics.CRM.LocalizedLabel",
+            Label: labelText,
+            LanguageCode: languageCode,
+          });
+        }
       });
     }
+
+    await this.dvApi.updateRelationship(relTypeName, rel).catch((error) => {
+      this.onLog(
+        `Failed to update relationship metadata for ${schemaName} error: ${(error as Error).message}`,
+        "warning",
+      );
+    });
   }
 
   /**
    * Update a form record (for form name/description or form XML content)
    */
   async updateForm(formId: string, updates: Record<string, unknown>): Promise<void> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     await this.dvApi.update("systemform", formId, updates);
   }
 
@@ -1111,6 +1138,11 @@ export class dvService {
    * Update a view record
    */
   async updateView(viewId: string, updates: Record<string, unknown>): Promise<void> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     await this.dvApi.update("savedquery", viewId, updates);
   }
 
@@ -1118,6 +1150,11 @@ export class dvService {
    * Update a chart record
    */
   async updateChart(chartId: string, updates: Record<string, unknown>): Promise<void> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     await this.dvApi.update("savedqueryvisualization", chartId, updates);
   }
 
@@ -1125,6 +1162,11 @@ export class dvService {
    * Update a sitemap record
    */
   async updateSiteMap(siteMapId: string, sitemapXml: string): Promise<void> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     await this.dvApi.update("sitemap", siteMapId, { sitemapxml: sitemapXml });
   }
 
@@ -1132,6 +1174,11 @@ export class dvService {
    * Retrieve a form by ID
    */
   async getFormById(formId: string): Promise<Record<string, unknown>> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     return await this.dvApi.retrieve("systemform", formId, ["formid", "formxml", "name", "formidunique", "type"]);
   }
 
@@ -1139,6 +1186,11 @@ export class dvService {
    * Retrieve a sitemap by ID
    */
   async getSiteMapById(siteMapId: string): Promise<Record<string, unknown>> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     return await this.dvApi.retrieve("sitemap", siteMapId, [
       "sitemapid",
       "sitemapxml",
@@ -1151,6 +1203,11 @@ export class dvService {
    * Publish all customizations
    */
   async publishAllCustomizations(): Promise<void> {
+    if (!this.connection) {
+      const error = "No connection available. Please connect first.";
+      this.onLog(error, "error");
+      throw new Error(error);
+    }
     await this.dvApi.publishCustomizations();
   }
 }
