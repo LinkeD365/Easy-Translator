@@ -2,7 +2,7 @@ import React from "react";
 import { observer } from "mobx-react";
 import { ViewModel } from "../model/viewModel";
 import { dvService } from "../services/dataverseService";
-import { Button, Caption1, Caption2, Field, Input, Label, ProgressBar, tokens } from "@fluentui/react-components";
+import { Button, Caption1, Field, Input, Label, ProgressBar, tokens } from "@fluentui/react-components";
 import { languageService } from "../services/languageService";
 import { ArrowUploadFilled, FolderOpenRegular } from "@fluentui/react-icons";
 
@@ -17,20 +17,6 @@ export const ImportPanel = observer((props: ImportPanelProps): React.JSX.Element
   const { vm, onLog } = props;
   const [batchCount, setBatchCount] = React.useState<string>("10");
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
-  const [isDarkTheme, setIsDarkTheme] = React.useState(() => {
-    return document.body.getAttribute("data-theme") === "dark";
-  });
-
-  React.useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDarkTheme(document.body.getAttribute("data-theme") === "dark");
-    });
-    observer.observe(document.body, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, []);
-
-  const warningBgColor = isDarkTheme ? "#3C3C1F" : "#DAA520";
-  const warningBorderColor = isDarkTheme ? "#B8860B" : "#B8860B";
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -44,7 +30,6 @@ export const ImportPanel = observer((props: ImportPanelProps): React.JSX.Element
 
   const handleImport = async () => {
     if (!selectedFile) return;
-    console.log(window.toolboxAPI.connections.getActiveConnection());
     try {
       await props.lgSvc.importTranslations(selectedFile, parseInt(batchCount) || 10);
     } catch (err) {
@@ -74,15 +59,14 @@ export const ImportPanel = observer((props: ImportPanelProps): React.JSX.Element
           {/* Warning Messages */}
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             <div
-              className="warningBox"
-              // style={{
-              //   display: "flex",
-              //   gap: "12px",
-              //   padding: "16px",
-              //   backgroundColor: warningBgColor,
-              //   border: `2px solid ${warningBorderColor}`,
-              //   borderRadius: "4px",
-              // }}
+              style={{
+                display: "flex",
+                gap: "12px",
+                padding: "16px",
+                backgroundColor: tokens.colorPaletteYellowBackground2,
+                border: `2px solid ${tokens.colorPaletteYellowBorder2}`,
+                borderRadius: "4px",
+              }}
             >
               <div style={{ fontSize: "40px", minWidth: "40px", lineHeight: 1 }}>⚠️</div>
               <div>
@@ -104,19 +88,17 @@ export const ImportPanel = observer((props: ImportPanelProps): React.JSX.Element
                 display: "flex",
                 gap: "12px",
                 padding: "16px",
-                backgroundColor: warningBgColor,
-                border: `2px solid ${warningBorderColor}`,
+                backgroundColor: tokens.colorPaletteYellowBackground2,
+                border: `2px solid ${tokens.colorPaletteYellowBorder2}`,
                 borderRadius: "4px",
               }}
             >
               <div style={{ fontSize: "40px", minWidth: "40px", lineHeight: 1 }}>⚠️</div>
               <div>
-                <Caption1 style={{ fontWeight: 600, marginBottom: "8px" }}>
+                <div style={{ fontWeight: 600, marginBottom: "8px" }}>
                   Prior to using this tool ensure that you have a backup of the current customizations
-                </Caption1>
-                <Caption2>
-                  If there is a problem the backup can be re-imported to restore original translations
-                </Caption2>
+                </div>
+                <div>If there is a problem the backup can be re-imported to restore original translations</div>
               </div>
             </div>
           </div>

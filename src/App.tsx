@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FluentProvider, webLightTheme, webDarkTheme, makeStyles, tokens } from "@fluentui/react-components";
+import { FluentProvider, webLightTheme, webDarkTheme } from "@fluentui/react-components";
 
 import { useConnection, useEventLog, useToolboxEvents } from "./hooks/useToolboxAPI";
 import { dvService } from "./services/dataverseService";

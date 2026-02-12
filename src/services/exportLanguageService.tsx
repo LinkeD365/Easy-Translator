@@ -1,4 +1,4 @@
-import { LabelOptions, LanguageDef, ViewModel } from "../model/viewModel";
+import { LabelOptions, LangProp, LangTranslation, LanguageDef, ViewModel } from "../model/viewModel";
 import { dvService } from "./dataverseService";
 import ExcelJS from "exceljs";
 
@@ -98,6 +98,7 @@ export class exportLanguageService {
   }
 
   private async exportTableInfo(workbook: ExcelJS.Workbook) {
+    if (!this.vm.options.table) return;
     const wsheet = workbook.addWorksheet("Entities");
 
     wsheet.addRow(["Entity Id", "Entity Logical Name", "Type", ...this.outputLangs.map((lang) => lang.code)]);
@@ -171,77 +172,85 @@ export class exportLanguageService {
     });
   }
 
+  private filterRelationshipLangProps(langProps: LangProp[]): LangProp[] {
+    return this.vm.options.labelOptions === LabelOptions.both ||
+      this.vm.options.labelOptions === LabelOptions.names
+      ? langProps.filter((lp) => lp.name === "DisplayName")
+      : [];
+  }
+
   private async exportRelationships(workbook: ExcelJS.Workbook) {
-    return new Promise<void>(async (resolve, reject) => {
-      try {
-        if (!this.vm.options.relationships || this.vm.options.labelOptions == LabelOptions.descriptions) return;
-        let wsheet = workbook.addWorksheet("Relationships");
-        wsheet.addRow([
-          "Entity",
-          "Relationship Id",
-          "Relationship Name",
-          "Relationship entity",
-          ...this.outputLangs.map((lang) => lang.code),
-        ]);
-        await Promise.all(
-          this.vm.selectedTables.map(async (table) => {
-            await this.dvSvc.getRelationships(table);
-          }),
-        );
+    if (!this.vm.options.relationships) return;
+    try {
+      let wsheet = workbook.addWorksheet("Relationships");
+      wsheet.addRow([
+        "Entity",
+        "Relationship Id",
+        "Relationship Name",
+        "Relationship entity",
+        ...this.outputLangs.map((lang) => lang.code),
+      ]);
+      await Promise.all(
+        this.vm.selectedTables.map(async (table) => {
+          await this.dvSvc.getRelationships(table);
+        }),
+      );
 
-        this.vm.selectedTables.forEach((table) => {
-          table.relationships
-            .filter((rel) => rel.type !== "ManyToManyRelationship")
-            .forEach((rel) => {
-              rel.langProps.forEach((lgProp) => {
-                const row = [
-                  table.logicalName,
-                  `{${rel.id}}`,
-                  ...Object.values(rel.props ?? {}).map((prop) => prop),
-                  ...lgProp.translation.map((trans) => trans.translation),
-                ];
+      this.vm.selectedTables.forEach((table) => {
+        table.relationships
+          .filter((rel) => rel.type !== "ManyToManyRelationship")
+          .forEach((rel) => {
+            const langProps = this.filterRelationshipLangProps(rel.langProps);
+            langProps.forEach((lgProp) => {
+              const row = [
+                table.logicalName,
+                `{${rel.id}}`,
+                ...Object.values(rel.props ?? {}).map((prop) => prop),
+                ...lgProp.translation.map((trans: LangTranslation) => trans.translation),
+              ];
 
-                wsheet.addRow(row);
-              });
+              wsheet.addRow(row);
             });
-        });
+          });
+      });
 
-        this.styleSheet(wsheet);
+      this.styleSheet(wsheet);
 
-        wsheet = workbook.addWorksheet("RelationshipsNN");
-        wsheet.addRow([
-          "Entity",
-          "Relationship Id",
-          "Relationship Intersect Entity",
-          ...this.outputLangs.map((lang) => lang.code),
-        ]);
+      wsheet = workbook.addWorksheet("RelationshipsNN");
+      wsheet.addRow([
+        "Entity",
+        "Relationship Id",
+        "Relationship Intersect Entity",
+        ...this.outputLangs.map((lang) => lang.code),
+      ]);
 
-        this.vm.selectedTables.forEach((table) => {
-          table.relationships
-            .filter((rel) => rel.type === "ManyToManyRelationship")
-            .forEach((rel) => {
-              rel.langProps.forEach((lgProp) => {
-                const row = [
-                  table.logicalName,
-                  `{${rel.id}}`,
-                  rel.props?.IntersectEntityName,
-                  ...lgProp.translation.map((trans) => trans.translation),
-                ];
+      this.vm.selectedTables.forEach((table) => {
+        table.relationships
+          .filter((rel) => rel.type === "ManyToManyRelationship")
+          .forEach((rel) => {
+            const langProps = this.filterRelationshipLangProps(rel.langProps);
+            langProps.forEach((lgProp) => {
+              const row = [
+                table.logicalName,
+                `{${rel.id}}`,
+                rel.props?.IntersectEntityName,
+                ...lgProp.translation.map((trans: LangTranslation) => trans.translation),
+              ];
 
-                wsheet.addRow(row);
-              });
+              wsheet.addRow(row);
             });
-        });
-        this.onLog("Relationships loaded", "success");
-        this.styleSheet(wsheet);
-        resolve();
-      } catch (err) {
-        reject(err);
-      }
-    });
+          });
+      });
+      this.onLog("Relationships loaded", "success");
+      this.styleSheet(wsheet);
+    } catch (err) {
+      this.onLog("Failed to export relationships", "error");
+      throw err;
+    }
   }
 
   private async exportBooleans(workbook: ExcelJS.Workbook) {
+    if (!this.vm.options.booleanOptions) return;
     const wsheet = workbook.addWorksheet("Booleans");
     wsheet.addRow([
       "Attribute Id",
@@ -292,6 +301,7 @@ export class exportLanguageService {
   }
 
   private async exportOptionSets(workbook: ExcelJS.Workbook) {
+    if (!this.vm.options.localOptionSets && !this.vm.options.globalOptionSets) return;
     let wsheet = workbook.addWorksheet("Local OptionSets");
     wsheet.addRow([
       "Attribute Id",
@@ -378,6 +388,7 @@ export class exportLanguageService {
   }
 
   private async exportViews(workbook: ExcelJS.Workbook) {
+    if (!this.vm.options.views) return;
     this.onLog("Exporting views...", "info");
     const wsheet = workbook.addWorksheet("Views");
     wsheet.addRow([
@@ -411,6 +422,7 @@ export class exportLanguageService {
   }
 
   private async exportCharts(workbook: ExcelJS.Workbook) {
+    if (!this.vm.options.charts) return;
     this.onLog("Exporting charts...", "info");
     const wsheet = workbook.addWorksheet("Charts");
     wsheet.addRow(["Chart Id", "Entity Logical Name", "Type", ...this.outputLangs.map((lang) => lang.code)]);
@@ -436,6 +448,9 @@ export class exportLanguageService {
   }
 
   private async exportForms(workbook: ExcelJS.Workbook) {
+    const formsExport =
+      this.vm.options.forms || this.vm.options.formFields || this.vm.options.formSections || this.vm.options.formTabs;
+    if (!formsExport && !this.vm.options.dashboards) return;
     let wsheet = workbook.addWorksheet("Forms");
     wsheet.addRow([
       "Form Unique Id",
@@ -445,8 +460,6 @@ export class exportLanguageService {
       "Type",
       ...this.outputLangs.map((lang) => lang.code),
     ]);
-    const formsExport =
-      this.vm.options.forms || this.vm.options.formFields || this.vm.options.formSections || this.vm.options.formTabs;
     if (formsExport || this.vm.options.dashboards) {
       await this.dvSvc.getUserLanguage().then((result: { uiLocale: string; locale: string; userid: string }) => {
         this.onLog(`User language is ${result.uiLocale} (${result.locale})`, "info");
@@ -537,7 +550,7 @@ export class exportLanguageService {
                 table.tabs.push({
                   id: element.getAttribute("id") ?? "",
                   name: form.name,
-                  props: { uniqueName: form.props?.uniqueName ?? "", lang: form.props?.lang ?? "", formId:form.id },
+                  props: { uniqueName: form.props?.uniqueName ?? "", lang: form.props?.lang ?? "", formId: form.id },
                   langProps: [
                     {
                       name: "Label",
@@ -748,6 +761,7 @@ export class exportLanguageService {
   }
 
   private async exportSiteMap(workbook: ExcelJS.Workbook) {
+    if (!this.vm.options.siteMaps) return;
     const areaSheet = workbook.addWorksheet("SiteMap Areas");
     areaSheet.addRow(["SiteMap Name", "SiteMap Id", "Area Id", "Type", ...this.outputLangs.map((lang) => lang.code)]);
     const groupSheet = workbook.addWorksheet("SiteMap Groups");
@@ -928,13 +942,10 @@ export class exportLanguageService {
   }
 
   private async exportDashboards(workbook: ExcelJS.Workbook) {
+    if (!this.vm.options.dashboards) return;
     let wsheet = workbook.addWorksheet("Dashboards");
     wsheet.addRow(["Form Unique Id", "Form Id", "Type", ...this.outputLangs.map((lang) => lang.code)]);
 
-    if (!this.vm.options.dashboards) {
-      this.styleSheet(wsheet);
-      return;
-    }
     this.onLog("Fetching dashboards...", "info");
 
     if (this.vm.dashboards.length === 0) {

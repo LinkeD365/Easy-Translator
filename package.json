@@ -2,12 +2,28 @@
   "name": "@linked365/pptb-easy-translator",
   "version": "0.1.0",
   "displayName": "Easy Translator",
-  "description": "A Power Platform Tool Box tool",
+  "description": "Export and import translations",
   "main": "index.html",
-  "author": "Power Platform ToolBox",
+  "author": "LinkeD365",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
+  },
+  "contributors": [
+    {
+      "name": "LinkeD365",
+      "url": "https://linked365.blog"
+    },
+    {
+      "name": "MsCRMTools",
+      "url": "https://xrmtoolbox.com/"
+    }
+  ],
+  "configurations": {
+    "repository": "https://github.com/LinkeD365/Easy-Translator",
+    "website": "https://github.com/LinkeD365/Easy-Translator",
+    "readmeUrl": "https://raw.githubusercontent.com/LinkeD365/Easy-Translator/refs/heads/master/README.md",
+    "iconUrl": "https://raw.githubusercontent.com/LinkeD365/Easy-Translator/refs/heads/master/assets/icon.png"
   },
   "scripts": {
     "build": "tsc && vite build",
